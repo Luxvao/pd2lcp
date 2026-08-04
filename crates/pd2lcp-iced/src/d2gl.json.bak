@@ -1,0 +1,55 @@
+{
+    "screen": {
+        "window_size_width": 800,
+        "window_size_height": 600,
+        "window_centered": true,
+        "window_position_x": 0,
+        "window_position_y": 0,
+        "unlock_cursor": false,
+        "window_fullscreen": true,
+        "window_vsync": true,
+        "foreground_fps_active": true,
+        "foreground_fps_value": 60,
+        "background_fps_active": true,
+        "background_fps_value": 25,
+        "auto_minimize": false,
+        "window_dark_mode": true
+    },
+    "graphics": {
+        "shader_preset": "anti-aliasing\\advanced-aa.slangp",
+        "sharpen": true,
+        "sharpen_strength": 1.2000000476837158,
+        "sharpen_clamp": 0.800000011920929,
+        "sharpen_radius": 0.4000000059604645,
+        "fxaa": false,
+        "fxaa_preset": 1,
+        "lut": 0,
+        "bloom": true,
+        "bloom_exposure": 1.0,
+        "bloom_gamma": 0.75,
+        "stretched_horizontal": false,
+        "stretched_vertical": false
+    },
+    "features": {
+        "hd_cursor": true,
+        "hd_text": true,
+        "hd_text_scale": 1.0,
+        "mini_map": true,
+        "mini_map_text_over": true,
+        "mini_map_width": 200,
+        "mini_map_height": 140,
+        "motion_prediction": true,
+        "skip_intro": false,
+        "no_pickup": false,
+        "show_item_quantity": true,
+        "show_fps": false
+    },
+    "other": {
+        "gl_ver_major": 4,
+        "gl_ver_minor": 6,
+        "use_compute_shader": false,
+        "frame_latency": 1,
+        "load_dlls_early": "",
+        "load_dlls_late": "SGD2FreeRes.dll"
+    }
+}

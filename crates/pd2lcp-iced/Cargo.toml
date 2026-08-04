@@ -1,0 +1,10 @@
+[package]
+name = "pd2lcp-iced"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+color-eyre = "0.6.5"
+iced = { version = "0.14.0", features = ["tokio"] }
+libpd2lcp = { path = "../libpd2lcp" }
+rfd = "0.17.2"

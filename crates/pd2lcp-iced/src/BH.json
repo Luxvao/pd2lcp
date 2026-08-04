@@ -1,0 +1,138 @@
+{
+    "bnet": {
+        "autofill_last_game": true,
+        "autofill_next_game": true,
+        "autofill_last_password": true,
+        "autofill_description": true,
+        "save_last_game": "",
+        "save_last_pass": "",
+        "save_last_desc": "",
+        "show_difficulty": true,
+        "show_gameserver": true,
+        "fail_to_join": 4000,
+        "game_list_refresh": 1500,
+        "whisper_color": {
+            "*chat": "9",
+            "*hc": "7"
+        },
+        "show_normal_difficulty": true,
+        "show_nightmare_difficulty": true,
+        "show_hell_difficulty": true
+    },
+    "general": {
+        "stats_on_right": false
+    },
+    "lootfilter": {
+        "filter_level": 1,
+        "last_filter_level": 0,
+        "filter_level_increase": "None",
+        "filter_level_decrease": "None",
+        "filter_level_previous": "None",
+        "advanced_item_display": true,
+        "show_iLvl": false,
+        "detailed_notifications": 1,
+        "allow_unknown_items": {
+            "enabled": false,
+            "hotkey": "None"
+        },
+        "always_show_stat_ranges": false,
+        "drop_sounds": true,
+        "legacy_settings": {
+            "show_ethereal": {
+                "enabled": false,
+                "hotkey": "None"
+            },
+            "show_sockets": {
+                "enabled": false,
+                "hotkey": "None"
+            },
+            "show_rune_numbers": {
+                "enabled": false,
+                "hotkey": "None"
+            },
+            "alt_item_style": {
+                "enabled": false,
+                "hotkey": "None"
+            },
+            "color_mod": {
+                "enabled": false,
+                "hotkey": "None"
+            },
+            "shorten_item_names": {
+                "enabled": false,
+                "hotkey": "None"
+            },
+            "drop_notifications": {
+                "enabled": true,
+                "hotkey": "None"
+            },
+            "close_notifications": {
+                "enabled": true,
+                "hotkey": "None"
+            },
+            "verbose_notifications": {
+                "enabled": false,
+                "hotkey": "None"
+            }
+        }
+    },
+    "game": {
+        "experience_meter": false,
+        "always_show_items": false
+    },
+    "party": {
+        "auto_party": {
+            "enabled": true,
+            "hotkey": "None"
+        },
+        "auto_corpse_loot": {
+            "enabled": true,
+            "hotkey": "None"
+        }
+    },
+    "screen_info": {
+        "automap_info": [
+            "Name: %GAMENAME%",
+            "Password: %GAMEPASS%",
+            "%LEVEL%",
+            "%GAMEDIFF%",
+            "%GAMETIME%",
+            "Ping: %PING%"
+        ],
+        "hide_game_password": false
+    },
+    "stash_export": {
+        "include_equipment": {
+            "enabled": true,
+            "hotkey": "None"
+        },
+        "export_on_menu": {
+            "enabled": false,
+            "hotkey": "None"
+        },
+        "export_gear": "None",
+        "mustache_default": "json",
+        "mustache_options": [
+            "json",
+            "stash"
+        ],
+        "mustache_format": {
+            "header": "{{#isEthereal}}Eth {{/isEthereal}}{{>header-unique}}{{>header-magic}}{{>header-else}}{{#count}} **x{{count}}**{{/count}}",
+            "header-else": "{{#quality^Unique|Magic|Rare}}{{^isRuneword}}{{^name}}{{type}}{{/name}}{{name}}{{/isRuneword}}{{#isRuneword}}**{{runeword}}** {{type}}{{/isRuneword}} (L{{iLevel}}){{#sockets}}[{{sockets}}]{{/sockets}}{{/quality}}",
+            "header-magic": "{{#quality$Magic|Rare}}**{{^name}}{{type}}{{/name}}{{name}}** (L{{iLevel}}){{#sockets}}[{{sockets}}]{{/sockets}}{{/quality}}",
+            "header-unique": "{{#quality=Unique}}**{{^name}}{{type}}{{/name}}{{name}}** (L{{iLevel}}){{#sockets}}[{{sockets}}]{{/sockets}}{{/quality}}",
+            "item": "{{>header}}{{>stats}}{{^isRuneword}}{{#socketed}}\n\n  * {{>>item}}{{/socketed}}{{/isRuneword}}\n",
+            "stash": "{{#this}}* {{>item}}\n\n{{/this}}",
+            "stats": "{{#defense}}\n\n    >{{defense}} defense{{/defense}}{{#stats}}\n\n    > {{value}}{{#range}} ({{min}}-{{max}}){{/range}} {{^skill}}{{name}}{{/skill}}{{skill}}{{/stats}}"
+        }
+    },
+    "bh_ui": {
+        "is_minimized": true,
+        "opened_x": 100,
+        "opened_y": 100,
+        "minimized_x": 203,
+        "minimized_y": 585,
+        "size_x": 400,
+        "size_y": 366
+    }
+}
