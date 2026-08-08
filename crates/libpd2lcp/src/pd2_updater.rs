@@ -54,6 +54,10 @@ pub async fn install_pd2(state: State, notify: EventNotify) -> Result<(), Error>
 
             output_file.write_all(&data)?;
 
+            done += 1;
+
+            notify.notify(Event::UpdatingPD2 { done, total })?;
+
             continue;
         }
 
@@ -79,6 +83,8 @@ pub async fn install_pd2(state: State, notify: EventNotify) -> Result<(), Error>
     let local_metadata_file = File::create(local_metadata_path)?;
 
     serde_json::to_writer_pretty(local_metadata_file, &metadata_game_files)?;
+
+    notify.notify(Event::DoneUpdating)?;
 
     Ok(())
 }

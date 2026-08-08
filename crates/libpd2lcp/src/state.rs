@@ -6,6 +6,7 @@ use crate::event::{Event, EventNotify};
 
 #[derive(Clone, Debug)]
 pub struct State {
+    base: PathBuf,
     game_files: PathBuf,
     env: Environment,
 }
@@ -25,6 +26,7 @@ impl State {
         let home = dirs::home_dir().ok_or(Error::NoHomeDir)?;
 
         let state = State {
+            base: home.join("Games/pd2lcp"),
             game_files: home.join("Games/pd2lcp/game"),
             env: Environment::Wine {
                 wine_binaries: home.join("Games/pd2lcp/wine"),
@@ -59,6 +61,20 @@ impl State {
         Ok(state)
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn init_raw() -> Result<State, Error> {
+        let home = dirs::home_dir().ok_or(Error::NoHomeDir)?;
+
+        Ok(State {
+            base: home.join("Games/pd2lcp"),
+            game_files: home.join("Games/pd2lcp/game"),
+            env: Environment::Wine {
+                wine_binaries: home.join("Games/pd2lcp/wine"),
+                wine_prefix: home.join("Games/pd2lcp/prefix"),
+            },
+        })
+    }
+
     #[cfg(target_os = "windows")]
     pub fn init() -> Result<State, Error> {
         let pd2_files = PathBuf::from("A:\\");
@@ -67,6 +83,10 @@ impl State {
             pd2_files,
             env: Environment::Winlator,
         })
+    }
+
+    pub fn base(&self) -> &Path {
+        &self.base
     }
 
     pub fn d2_dir(&self) -> &Path {

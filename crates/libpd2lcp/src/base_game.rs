@@ -1,9 +1,11 @@
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 
 use crate::{error::Error, state::State};
 
 #[cfg(target_os = "linux")]
-pub async fn install_d2(state: &State, d2_installer: &Path) -> Result<(), Error> {
+pub async fn install_d2(state: State, d2_installer: PathBuf) -> Result<(), Error> {
     use tokio::process::Command;
 
     let status_d2 = Command::new(state.wine_exe("wine")?)
@@ -20,7 +22,7 @@ pub async fn install_d2(state: &State, d2_installer: &Path) -> Result<(), Error>
 }
 
 #[cfg(target_os = "linux")]
-pub async fn install_d2_lod(state: &State, d2_lod_installer: &Path) -> Result<(), Error> {
+pub async fn install_d2_lod(state: State, d2_lod_installer: PathBuf) -> Result<(), Error> {
     use tokio::process::Command;
 
     let status_d2_lod = Command::new(state.wine_exe("wine")?)

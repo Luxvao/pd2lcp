@@ -1,6 +1,0 @@
-<?xml version='1.0' encoding='UTF-8' standalone='no'?>
-<!DOCTYPE cambalache-project SYSTEM "cambalache-project.dtd">
-<!-- Created with Cambalache 1.0 -->
-<cambalache-project version="1.0.0" target_tk="gtk-4.0" depends="libadwaita-1">
-  <ui filename="PD2LCP.ui" sha256="ee0f7c669c81d9d267c0973cc31e728027112c095a765f58a22f687036c1d8f7"/>
-</cambalache-project>

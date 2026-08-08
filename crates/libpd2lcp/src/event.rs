@@ -1,35 +1,39 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Mutex},
 };
+
+use tokio::sync::Notify;
 
 use crate::error::Error;
 
 #[derive(Clone, Debug)]
 pub enum Event {
     // This is a catch-all for any error it might encounter.
-    None,
     Error(String),
     DownloadingWine,
     FinishedDownloadingWine,
     InitPrefix,
     FinishedInitPrefix,
     UpdatingPD2 { done: u32, total: u32 },
+    DoneUpdating,
 }
 
 #[derive(Clone, Default, Debug)]
 pub struct EventNotify {
-    inner: Arc<(Mutex<VecDeque<Event>>, Condvar)>,
+    inner: Arc<(Mutex<VecDeque<Event>>, Notify)>,
 }
 
 unsafe impl Send for EventNotify {}
 unsafe impl Sync for EventNotify {}
 
 impl EventNotify {
-    pub fn wait_event(&self) -> Result<Vec<Event>, Error> {
-        let (guard, condvar) = &*self.inner;
+    pub async fn wait_event(&self) -> Result<Vec<Event>, Error> {
+        let (guard, notify) = &*self.inner;
 
-        let mut lock = condvar.wait_while(guard.lock()?, |i| i.is_empty())?;
+        notify.notified().await;
+
+        let mut lock = guard.lock()?;
 
         let mut out = Vec::new();
 
@@ -46,6 +50,8 @@ impl EventNotify {
         let mut lock = guard.lock()?;
 
         lock.push_back(event);
+
+        drop(lock);
 
         condvar.notify_one();
 
