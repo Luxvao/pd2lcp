@@ -5,7 +5,9 @@ use tokio::process::Command;
 use crate::{error::Error, state::State};
 
 #[cfg(target_os = "linux")]
-pub async fn install_d2(state: State, d2_installer: PathBuf) -> Result<(), Error> {
+pub async fn install_d2(state: Option<State>, d2_installer: PathBuf) -> Result<(), Error> {
+    let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
+
     let status_d2 = Command::new(state.wine_exe("wine")?)
         .env("WINEPREFIX", state.wine_prefix()?)
         .arg(d2_installer)
@@ -20,7 +22,9 @@ pub async fn install_d2(state: State, d2_installer: PathBuf) -> Result<(), Error
 }
 
 #[cfg(target_os = "linux")]
-pub async fn install_d2_lod(state: State, d2_lod_installer: PathBuf) -> Result<(), Error> {
+pub async fn install_d2_lod(state: Option<State>, d2_lod_installer: PathBuf) -> Result<(), Error> {
+    let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
+
     let status_d2_lod = Command::new(state.wine_exe("wine")?)
         .env("WINEPREFIX", state.wine_prefix()?)
         .arg(d2_lod_installer)
@@ -35,7 +39,7 @@ pub async fn install_d2_lod(state: State, d2_lod_installer: PathBuf) -> Result<(
 }
 
 #[cfg(target_os = "windows")]
-pub async fn install_d2(_: State, d2_installer: PathBuf) -> Result<(), Error> {
+pub async fn install_d2(_: Option<State>, d2_installer: PathBuf) -> Result<(), Error> {
     let status_d2 = Command::new(d2_installer).status().await?;
 
     if !status_d2.success() {
@@ -46,7 +50,7 @@ pub async fn install_d2(_: State, d2_installer: PathBuf) -> Result<(), Error> {
 }
 
 #[cfg(target_os = "windows")]
-pub async fn install_d2_lod(_: State, d2_lod_installer: PathBuf) -> Result<(), Error> {
+pub async fn install_d2_lod(_: Option<State>, d2_lod_installer: PathBuf) -> Result<(), Error> {
     let status_d2_lod = Command::new(d2_lod_installer).status().await?;
 
     if !status_d2_lod.success() {

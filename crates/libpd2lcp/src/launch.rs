@@ -2,7 +2,9 @@ use crate::{error::Error, settings::Settings, state::State};
 use tokio::process::Command;
 
 #[cfg(target_os = "linux")]
-pub async fn launch(state: State, settings: Settings) -> Result<(), Error> {
+pub async fn launch(state: Option<State>, settings: Settings) -> Result<(), Error> {
+    let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
+
     let game_path = state.pd2_dir().join("Game.exe");
     let args = settings.compose_args();
 
@@ -18,7 +20,9 @@ pub async fn launch(state: State, settings: Settings) -> Result<(), Error> {
 }
 
 #[cfg(target_os = "windows")]
-pub async fn launch(state: State, settings: Settings) -> Result<(), Error> {
+pub async fn launch(state: Option<State>, settings: Settings) -> Result<(), Error> {
+    let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
+
     let game_path = state.pd2_dir().join("Game.exe");
     let args = settings.compose_args();
 

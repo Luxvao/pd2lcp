@@ -22,7 +22,9 @@ use std::path::Path;
 
 use libpd2lcp::{
     base_game::{install_d2, install_d2_lod},
+    error::Error,
     event::{Event, EventNotify},
+    filter::{Filter, FilterGroup, get_filter_authors},
     launch::launch,
     pd2_updater::{install_pd2, update_available},
     settings::{GraphicsMode, Settings},
@@ -191,13 +193,26 @@ fn step_indicator<'a>(current: u8, total: u8) -> Element<'a, Message> {
 
 #[derive(Debug)]
 struct Launcher {
+    // State
     game_state: Option<State>,
     gui_state: GuiState,
     settings: Settings,
+
+    // Error mechanism
+    error_prev_screen: Option<GuiState>,
+
+    // Runtime values
+    // Filter stuff
+    filter_authors: Option<Vec<FilterGroup>>,
+    filters: Option<Vec<Filter>>,
+
+    // Strings
     launch_button_label: &'static str,
     init_screen_text: &'static str,
-    error_prev_screen: Option<GuiState>,
+
+    // Progress
     installing_progress: Option<(u32, u32)>,
+
     launch_button_disabled: bool,
     allow_next: bool,
     disable_get_started: bool,
@@ -211,10 +226,12 @@ enum GuiState {
     Main,
     Error(String),
     Settings,
+    Filters,
 }
 
 #[derive(Clone, Debug)]
 enum Message {
+    Fallible(Result<(), String>),
     InstallerExit(Result<(), String>),
     LaunchTask(Result<(), String>),
     NotifyEvent(Event),
@@ -236,10 +253,15 @@ enum Message {
     FilePickerButtonD2,
     FilePickerButtonLOD,
     ErrorReturnButton,
+    FilterButton,
+    FetchAuthorsTask(Result<Vec<FilterGroup>, String>),
 }
 
 fn update(state: &mut Launcher, message: Message) -> Task<Message> {
     match message {
+        Message::Fallible(res) => {
+            let _ = handle_fallible(state, res, |_, _| None);
+        }
         Message::InstallerExit(res) => {
             let _ = handle_fallible(state, res, |state, _| {
                 state.allow_next = true;
@@ -257,20 +279,16 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             state.allow_next = false;
             match state.gui_state {
                 GuiState::InstallD2 => state.gui_state = GuiState::InstallLOD,
-                GuiState::InstallLOD => {
-                    state.gui_state = GuiState::Main;
+                GuiState::InstallLOD => match state.game_state {
+                    Some(ref game_state) => {
+                        state.gui_state = GuiState::Main;
 
-                    if let Err(e) = File::create(
-                        state
-                            .game_state
-                            .as_ref()
-                            .expect("pd2lcp is not initialised")
-                            .base()
-                            .join("setup_finished"),
-                    ) {
-                        state.gui_state = GuiState::Error(e.to_string());
-                    };
-                }
+                        if let Err(e) = File::create(game_state.base().join("setup_finished")) {
+                            display_error(state, e.to_string());
+                        };
+                    }
+                    None => display_error(state, Error::Pd2lcpNotInitialised.to_string()),
+                },
                 _ => (),
             }
         }
@@ -296,24 +314,16 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
         }
         Message::D2InstallerSelected(p) => {
             if let Some(path) = p {
-                return Task::perform(
-                    install_d2(
-                        state.game_state.clone().expect("pd2lcp is not initialised"),
-                        path,
-                    ),
-                    |r| Message::InstallerExit(r.map_err(|r| r.to_string())),
-                );
+                return Task::perform(install_d2(state.game_state.clone(), path), |r| {
+                    Message::InstallerExit(r.map_err(|r| r.to_string()))
+                });
             }
         }
         Message::LODInstallerSelected(p) => {
             if let Some(path) = p {
-                return Task::perform(
-                    install_d2_lod(
-                        state.game_state.clone().expect("pd2lcp is not initialised"),
-                        path,
-                    ),
-                    |r| Message::InstallerExit(r.map_err(|r| r.to_string())),
-                );
+                return Task::perform(install_d2_lod(state.game_state.clone(), path), |r| {
+                    Message::InstallerExit(r.map_err(|r| r.to_string()))
+                });
             }
         }
         Message::InitGameState(res) => {
@@ -330,41 +340,36 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
         Message::SoundCheckbox(b) => state.settings.sndbkg = b,
         Message::BnetCheckbox(b) => state.settings.skiptobnet = b,
         Message::UpdatesCheckbox(b) => state.settings.no_updates = b,
-        Message::ApplyButton => {
-            let game_state = state
-                .game_state
-                .as_ref()
-                .expect("pd2lcp is not initialised");
+        Message::ApplyButton => match state.game_state.as_ref() {
+            Some(game_state) => {
+                state.gui_state = GuiState::Main;
 
-            state.gui_state = GuiState::Main;
-
-            let _ = handle_fallible(
-                state,
-                game_state
-                    .serialise_settings(&state.settings)
-                    .map_err(|e| e.to_string()),
-                |_, _| None,
-            );
-        }
+                return Task::perform(
+                    State::serialise_settings(game_state.clone(), state.settings.clone()),
+                    |res| Message::Fallible(res.map_err(|e| e.to_string())),
+                );
+            }
+            None => display_error(state, Error::Pd2lcpNotInitialised.to_string()),
+        },
         Message::ErrorReturnButton => {
-            state.gui_state = state.error_prev_screen.take().expect("this cannot happen")
+            if let Some(prev) = state.error_prev_screen.take() {
+                state.gui_state = prev;
+            } else {
+                display_error(state, "This shouldn't happen. Report it".to_string());
+            }
         }
         Message::LaunchButton => {
             state.launch_button_disabled = true;
 
             if state.settings.no_updates {
                 return Task::perform(
-                    launch(
-                        state.game_state.clone().expect("pd2lcp is not initialised"),
-                        state.settings.clone(),
-                    ),
+                    launch(state.game_state.clone(), state.settings.clone()),
                     |r| Message::LaunchTask(r.map_err(|e| e.to_string())),
                 );
             } else {
-                return Task::perform(
-                    update_available(state.game_state.clone().expect("pd2lcp is not initialised")),
-                    |r| Message::UpdateCheckTask(r.map_err(|e| e.to_string())),
-                );
+                return Task::perform(update_available(state.game_state.clone()), |r| {
+                    Message::UpdateCheckTask(r.map_err(|e| e.to_string()))
+                });
             }
         }
         Message::UpdateCheckTask(res) => {
@@ -373,19 +378,13 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
                     state.launch_button_label = "Updating";
 
                     return Some(Task::perform(
-                        install_pd2(
-                            state.game_state.clone().expect("pd2lcp is not initialised"),
-                            EVENT_NOTIFY.clone(),
-                        ),
+                        install_pd2(state.game_state.clone(), EVENT_NOTIFY.clone()),
                         |r| Message::UpdateTask(r.map_err(|e| e.to_string())),
                     ));
                 }
 
                 Some(Task::perform(
-                    launch(
-                        state.game_state.clone().expect("pd2lcp is not initialised"),
-                        state.settings.clone(),
-                    ),
+                    launch(state.game_state.clone(), state.settings.clone()),
                     |r| Message::LaunchTask(r.map_err(|e| e.to_string())),
                 ))
             }) {
@@ -398,10 +397,7 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
                 state.installing_progress = None;
 
                 Some(Task::perform(
-                    launch(
-                        state.game_state.clone().expect("pd2lcp is not initialised"),
-                        state.settings.clone(),
-                    ),
+                    launch(state.game_state.clone(), state.settings.clone()),
                     |r| Message::LaunchTask(r.map_err(|e| e.to_string())),
                 ))
             }) {
@@ -421,15 +417,23 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             Event::DoneUpdating => {
                 state.installing_progress = None;
             }
-            Event::Error(e) => {
-                state.error_prev_screen = Some(state.gui_state.clone());
-                state.gui_state = GuiState::Error(e);
-            }
+            Event::Error(e) => display_error(state, e),
             Event::DownloadingWine => state.init_screen_text = "Downloading Wine...",
             Event::FinishedDownloadingWine => (),
             Event::InitPrefix => state.init_screen_text = "Setting up the prefix...",
             Event::FinishedInitPrefix => state.init_screen_text = "Done!",
         },
+        Message::FilterButton => {
+            return Task::perform(get_filter_authors(), |r| {
+                Message::FetchAuthorsTask(r.map_err(|e| e.to_string()))
+            });
+        }
+        Message::FetchAuthorsTask(res) => {
+            let _ = handle_fallible(state, res, |state, authors| {
+                state.filter_authors = Some(authors);
+                None
+            });
+        }
     }
 
     Task::none()
@@ -443,6 +447,7 @@ fn view(state: &Launcher) -> Element<'_, Message> {
         GuiState::Main => main_screen(state),
         GuiState::Settings => settings_screen(state),
         GuiState::Error(ref e) => error_screen(e),
+        GuiState::Filters => filters_screen(state),
     }
 }
 
@@ -685,6 +690,10 @@ fn error_screen(message: &str) -> Element<'_, Message> {
     .into()
 }
 
+fn filters_screen(state: &Launcher) -> Element<'_, Message> {
+    todo!()
+}
+
 fn worker() -> impl Stream<Item = Message> {
     stream::channel(100, async |mut output| {
         let notify = EVENT_NOTIFY.clone();
@@ -705,15 +714,47 @@ fn subscription(_: &Launcher) -> Subscription<Message> {
 }
 
 fn main() -> Result<()> {
-    #[cfg(not(feature = "gamemode"))]
-    let fullscreen = std::env::args().any(|arg| arg == "-gamemode");
+    // Panic hook so we report stuff that comes up before the GUI initialises
+    let default_hook = std::panic::take_hook();
 
-    #[cfg(feature = "gamemode")]
-    let fullscreen = true;
+    std::panic::set_hook(Box::new(move |panic_info| {
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Error)
+            .set_title("Panic occurred")
+            .set_description(panic_info.to_string())
+            .show();
+
+        default_hook(panic_info)
+    }));
+
+    let mut args = std::env::args();
+
+    let fullscreen = args.any(|arg| arg == "-gamemode") || cfg!(feature = "gamemode");
+
+    let mut update_flag = false;
+
+    if args.any(|arg| arg == "-skiplauncher") {
+        // Here we just check if we have to update or not, then launch or update
+        let state_raw = State::init_raw().expect("Failed to init state");
+        let settings = state_raw.deserialise_settings();
+
+        let rt = tokio::runtime::Runtime::new().expect("Failed to initiate tokio runtime");
+
+        if let Ok(true) = rt.block_on(update_available(Some(state_raw.clone()))) {
+            // Update is available (if it errors we just launch, maybe they don't have internet connectivity)
+            update_flag = true;
+        } else {
+            // Otherwise we just launch
+            rt.block_on(launch(Some(state_raw), settings))
+                .expect("Failed to launch pd2");
+
+            std::process::exit(0);
+        };
+    }
 
     iced::application(
-        || {
-            let state_raw = State::init_raw().expect("Failed to init initial state");
+        move || {
+            let state_raw = State::init_raw().expect("Failed to init state");
             let settings = state_raw.deserialise_settings();
 
             let base_path = state_raw.base();
@@ -734,7 +775,7 @@ fn main() -> Result<()> {
 
                 #[cfg(target_os = "windows")]
                 let ret = (
-                    Some(State::init_raw().expect("Failed to init initial state")),
+                    Some(State::init_raw().expect("Failed to init state")),
                     GuiState::InstallD2,
                 );
 
@@ -743,18 +784,35 @@ fn main() -> Result<()> {
                 (Some(state_raw), GuiState::Main)
             };
 
-            Launcher {
-                game_state,
+            let app = Launcher {
+                game_state: game_state.clone(),
                 gui_state,
                 settings,
+
                 error_prev_screen: None,
+
+                filter_authors: None,
+                filters: None,
+
                 launch_button_label: "Launch",
                 init_screen_text: "PD2LCP is not set up",
+
                 installing_progress: None,
+
                 launch_button_disabled: false,
                 allow_next: false,
                 disable_get_started: false,
-            }
+            };
+
+            let task = if update_flag {
+                Task::perform(install_pd2(game_state, EVENT_NOTIFY.clone()), |r| {
+                    Message::UpdateTask(r.map_err(|e| e.to_string()))
+                })
+            } else {
+                Task::none()
+            };
+
+            (app, task)
         },
         update,
         view,
@@ -779,13 +837,15 @@ where
 {
     match res {
         Ok(o) => return f(state, o),
-        Err(e) => {
-            state.error_prev_screen = Some(state.gui_state.clone());
-            state.gui_state = GuiState::Error(e);
-        }
+        Err(e) => display_error(state, e),
     }
 
     None
+}
+
+fn display_error(state: &mut Launcher, error: String) {
+    state.error_prev_screen = Some(state.gui_state.clone());
+    state.gui_state = GuiState::Error(error);
 }
 
 #[cfg(target_os = "windows")]

@@ -1,6 +1,7 @@
 pub mod base_game;
 pub mod error;
 pub mod event;
+pub mod filter;
 pub mod launch;
 pub mod metadata;
 pub mod pd2_updater;

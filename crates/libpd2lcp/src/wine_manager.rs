@@ -1,5 +1,8 @@
-use fs_err::{File, read_dir};
-use tokio::process::Command;
+use tokio::{
+    fs::{File, create_dir, create_dir_all, read_dir, rename},
+    io::AsyncWriteExt,
+    process::Command,
+};
 
 use std::io::Write;
 
@@ -10,15 +13,15 @@ pub const WINE_URL: &str = "https://github.com/Kron4ek/Wine-Builds/releases/down
 pub async fn fetch_wine(state: &State) -> Result<(), Error> {
     let install_path = state.wine_dir()?;
 
-    fs_err::create_dir(install_path)?;
+    create_dir(install_path).await?;
 
     let wine_bytes = reqwest::get(WINE_URL).await?.bytes().await?;
 
     let wine_archive_path = install_path.join("wine_tarball.tar.xz");
 
-    let mut wine_archive_file = File::create(&wine_archive_path)?;
+    let mut wine_archive_file = File::create(&wine_archive_path).await?;
 
-    wine_archive_file.write_all(&wine_bytes)?;
+    wine_archive_file.write_all(&wine_bytes).await?;
 
     // Now we untar it
     let status = Command::new("tar")
@@ -30,13 +33,15 @@ pub async fn fetch_wine(state: &State) -> Result<(), Error> {
         .await?;
 
     if !status.success() {
-        return Err(Error::FailedToUnzipArchive);
+        return Err(Error::FailedToUntarArchive);
     }
 
-    for file in read_dir(install_path.join("wine-11.14-staging-tkg-amd64"))? {
-        let file = file?;
-
-        fs_err::rename(file.path(), install_path.join(file.file_name()))?;
+    while let Ok(Some(file)) = read_dir(install_path.join("wine-11.14-staging-tkg-amd64"))
+        .await?
+        .next_entry()
+        .await
+    {
+        rename(file.path(), install_path.join(file.file_name())).await?;
     }
 
     Ok(())
@@ -45,7 +50,7 @@ pub async fn fetch_wine(state: &State) -> Result<(), Error> {
 pub async fn create_prefix(state: &State) -> Result<(), Error> {
     let prefix = state.wine_prefix()?;
 
-    fs_err::create_dir_all(prefix)?;
+    create_dir_all(prefix).await?;
 
     let status = Command::new(state.wine_exe("wineboot")?)
         .env("WINEPREFIX", prefix)

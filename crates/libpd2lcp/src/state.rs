@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use fs_err::File;
+use tokio::io::AsyncWriteExt;
 
 use crate::error::Error;
 use crate::event::EventNotify;
@@ -114,6 +114,10 @@ impl State {
         self.game_files.join("Diablo II/ProjectD2")
     }
 
+    pub fn filter_dir(&self) -> PathBuf {
+        self.pd2_dir().join("filters/local")
+    }
+
     pub fn wine_dir(&self) -> Result<&Path, Error> {
         if let Environment::Wine {
             ref wine_binaries,
@@ -147,14 +151,16 @@ impl State {
             .map(|p| p.join("dosdevices").join(dosdevice))
     }
 
-    pub fn serialise_settings(&self, settings: &Settings) -> Result<(), Error> {
+    pub async fn serialise_settings(self, settings: Settings) -> Result<(), Error> {
         let settings_file_path = self.base().join("settings.toml");
 
-        let mut settings_file = File::create(&settings_file_path)?;
+        let mut settings_file = tokio::fs::File::create(&settings_file_path).await?;
 
-        let settings_serialised = toml::to_string_pretty(settings)?;
+        let settings_serialised = toml::to_string_pretty(&settings)?;
 
-        settings_file.write_all(settings_serialised.as_bytes())?;
+        settings_file
+            .write_all(settings_serialised.as_bytes())
+            .await?;
 
         Ok(())
     }
@@ -162,7 +168,8 @@ impl State {
     pub fn deserialise_settings(&self) -> Settings {
         let settings_file_path = self.base().join("settings.toml");
 
-        let Ok(mut settings_file) = File::open(&settings_file_path) else {
+        // This can use normal File since it's never called in the GUI at all
+        let Ok(mut settings_file) = std::fs::File::open(&settings_file_path) else {
             return Settings::default();
         };
 

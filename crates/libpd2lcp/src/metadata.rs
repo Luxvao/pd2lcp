@@ -24,7 +24,7 @@ impl TryFrom<GameFilesMetadataRaw> for Vec<GameFileMetadata> {
             .checksum
             .iter()
             .map(|i| {
-                let mut parts = i.split(" ");
+                let mut parts = i.split("  ");
 
                 let checksum = parts
                     .next()

@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("pd2 is not initialised")]
+    Pd2lcpNotInitialised,
     #[error("installation is corrupted")]
     InstallCorrupted,
     #[error("invalid game file data metadata")]
@@ -18,8 +20,8 @@ pub enum Error {
     FailedToInstallD2,
     #[error("failed to install d2 lod")]
     FailedToInstallD2LOD,
-    #[error("unable to unzip the archive. Is tar installed?")]
-    FailedToUnzipArchive,
+    #[error("unable to untar the archive. Is tar installed?")]
+    FailedToUntarArchive,
     #[error("this operation does not exist on this platform")]
     InvalidPlatform,
     #[error("mutex poisoned")]
