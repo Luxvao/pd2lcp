@@ -1,8 +1,11 @@
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use fs_err::File;
+
 use crate::error::Error;
-#[cfg(target_os = "linux")]
-use crate::event::{Event, EventNotify};
+use crate::event::EventNotify;
+use crate::settings::Settings;
 
 #[derive(Clone, Debug)]
 pub struct State {
@@ -39,7 +42,7 @@ impl State {
         }
 
         if !state.wine_dir()?.is_dir() {
-            use crate::wine_manager::fetch_wine;
+            use crate::{event::Event, wine_manager::fetch_wine};
 
             notify.notify(Event::DownloadingWine)?;
 
@@ -49,7 +52,7 @@ impl State {
         }
 
         if !state.wine_prefix()?.is_dir() {
-            use crate::wine_manager::create_prefix;
+            use crate::{event::Event, wine_manager::create_prefix};
 
             notify.notify(Event::InitPrefix)?;
 
@@ -76,12 +79,26 @@ impl State {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn init() -> Result<State, Error> {
-        let pd2_files = PathBuf::from("A:\\");
+    pub async fn init(_: EventNotify) -> Result<State, Error> {
+        let base = PathBuf::from("A:\\");
+        let game_files = base.clone();
 
         Ok(State {
-            pd2_files,
-            env: Environment::Winlator,
+            base,
+            game_files,
+            env: Environment::External,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn init_raw() -> Result<State, Error> {
+        let base = PathBuf::from("A:\\");
+        let game_files = base.clone();
+
+        Ok(State {
+            base,
+            game_files,
+            env: Environment::External,
         })
     }
 
@@ -128,5 +145,35 @@ impl State {
     pub fn wine_dosdevice(&self, dosdevice: &str) -> Result<PathBuf, Error> {
         self.wine_prefix()
             .map(|p| p.join("dosdevices").join(dosdevice))
+    }
+
+    pub fn serialise_settings(&self, settings: &Settings) -> Result<(), Error> {
+        let settings_file_path = self.base().join("settings.toml");
+
+        let mut settings_file = File::create(&settings_file_path)?;
+
+        let settings_serialised = toml::to_string_pretty(settings)?;
+
+        settings_file.write_all(settings_serialised.as_bytes())?;
+
+        Ok(())
+    }
+
+    pub fn deserialise_settings(&self) -> Settings {
+        let settings_file_path = self.base().join("settings.toml");
+
+        let Ok(mut settings_file) = File::open(&settings_file_path) else {
+            return Settings::default();
+        };
+
+        let mut buffer = Vec::new();
+
+        let _ = settings_file.read_to_end(&mut buffer);
+
+        let Ok(settings) = toml::from_slice(&buffer) else {
+            return Settings::default();
+        };
+
+        settings
     }
 }

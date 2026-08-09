@@ -18,11 +18,15 @@ pub async fn launch(state: State, settings: Settings) -> Result<(), Error> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn launch(state: &State, settings: &Settings) -> Result<(), Error> {
-    let game_path = state.pd2_files.join("Game.exe");
+pub async fn launch(state: State, settings: Settings) -> Result<(), Error> {
+    let game_path = state.pd2_dir().join("Game.exe");
     let args = settings.compose_args();
 
-    Command::new(game_path).args(args).status()?;
+    Command::new(game_path)
+        .args(args)
+        .current_dir(state.pd2_dir())
+        .status()
+        .await?;
 
     Ok(())
 }

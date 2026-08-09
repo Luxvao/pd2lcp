@@ -32,6 +32,10 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error("{0}")]
     SerdeJsonError(#[from] serde_json::Error),
+    #[error("{0}")]
+    TomlDeError(#[from] toml::de::Error),
+    #[error("{0}")]
+    TomlSerError(#[from] toml::ser::Error),
 }
 
 impl<T> From<PoisonError<T>> for Error {
