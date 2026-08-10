@@ -1,6 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{fs::File, path::PathBuf, sync::LazyLock};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
 use color_eyre::eyre::Result;
 use iced::{
@@ -13,12 +17,6 @@ use iced::{
         Space, button, checkbox, column as col, container, pick_list, progress_bar, row, text,
     },
 };
-
-#[cfg(target_os = "windows")]
-use libpd2lcp::error::Error;
-
-#[cfg(target_os = "windows")]
-use std::path::Path;
 
 use libpd2lcp::{
     base_game::{install_d2, install_d2_lod},
@@ -143,6 +141,24 @@ fn secondary_button_style(_theme: &Theme, status: button::Status) -> button::Sty
     }
 }
 
+fn danger_button_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let border_color = match status {
+        button::Status::Hovered => palette::ACCENT,
+        _ => palette::BORDER,
+    };
+
+    button::Style {
+        background: Some(palette::ERROR.into()),
+        text_color: palette::TEXT,
+        border: Border {
+            color: border_color,
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        ..Default::default()
+    }
+}
+
 fn progress_style(_theme: &Theme) -> progress_bar::Style {
     progress_bar::Style {
         background: palette::BACKGROUND.into(),
@@ -208,6 +224,7 @@ struct Launcher {
 
     // Strings
     launch_button_label: &'static str,
+    reset_button_label: &'static str,
     init_screen_text: &'static str,
 
     // Progress
@@ -216,6 +233,40 @@ struct Launcher {
     launch_button_disabled: bool,
     allow_next: bool,
     disable_get_started: bool,
+
+    // Reset confirm
+    confirm: bool,
+}
+
+impl Launcher {
+    pub fn default_with(
+        game_state: Option<State>,
+        gui_state: GuiState,
+        settings: Settings,
+    ) -> Launcher {
+        Launcher {
+            game_state,
+            gui_state,
+            settings,
+
+            error_prev_screen: None,
+
+            filter_authors: None,
+            filters: None,
+
+            launch_button_label: "Launch",
+            reset_button_label: "Reset",
+            init_screen_text: "PD2LCP is not set up",
+
+            installing_progress: None,
+
+            launch_button_disabled: false,
+            allow_next: false,
+            disable_get_started: false,
+
+            confirm: false,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -241,6 +292,7 @@ enum Message {
     UpdateTask(Result<(), String>),
     LaunchButton,
     SettingsButton,
+    ExitButton,
     GraphicsMode(GraphicsMode),
     SoundCheckbox(bool),
     BnetCheckbox(bool),
@@ -253,12 +305,47 @@ enum Message {
     FilePickerButtonD2,
     FilePickerButtonLOD,
     ErrorReturnButton,
+    ResetButton,
     FilterButton,
     FetchAuthorsTask(Result<Vec<FilterGroup>, String>),
 }
 
 fn update(state: &mut Launcher, message: Message) -> Task<Message> {
     match message {
+        Message::ResetButton => 'rst: {
+            if !state.confirm {
+                state.confirm = true;
+                state.reset_button_label = "Confirm";
+
+                break 'rst;
+            }
+
+            if let Some(ref g_state) = state.game_state {
+                #[cfg(target_os = "linux")]
+                let game_state = None;
+                #[cfg(target_os = "windows")]
+                let game_state = Some(g_state.clone());
+
+                #[cfg(target_os = "linux")]
+                let gui_state = GuiState::Init;
+                #[cfg(target_os = "windows")]
+                let gui_state = GuiState::InstallD2;
+
+                let mut new_state =
+                    Launcher::default_with(game_state, gui_state, state.settings.clone());
+
+                // Now we just clean it up
+                let base = g_state.base();
+
+                let _ = handle_fallible(
+                    &mut new_state,
+                    cleanup(base).map_err(|e| e.to_string()),
+                    |_, _| None,
+                );
+
+                *state = new_state;
+            }
+        }
         Message::Fallible(res) => {
             let _ = handle_fallible(state, res, |_, _| None);
         }
@@ -334,7 +421,14 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
                 None
             });
         }
-        Message::SettingsButton => state.gui_state = GuiState::Settings,
+        Message::SettingsButton => {
+            state.confirm = false;
+            state.reset_button_label = "Reset";
+            state.gui_state = GuiState::Settings;
+        }
+        Message::ExitButton => {
+            return iced::exit();
+        }
         Message::ReturnButton => state.gui_state = GuiState::Main,
         Message::GraphicsMode(new) => state.settings.graphics_mode = new,
         Message::SoundCheckbox(b) => state.settings.sndbkg = b,
@@ -555,6 +649,11 @@ fn main_screen(state: &Launcher) -> Element<'_, Message> {
             .on_press(Message::SettingsButton)
             .padding([space::XS, space::SM])
             .style(secondary_button_style),
+        Space::new().width(space::MD),
+        button(text("Exit").size(13))
+            .on_press(Message::ExitButton)
+            .padding([space::XS, space::SM])
+            .style(secondary_button_style)
     ]
     .align_y(iced::Alignment::Center);
 
@@ -647,15 +746,27 @@ fn settings_screen(state: &Launcher) -> Element<'_, Message> {
                 Space::new().height(space::XS),
                 checkbox(state.settings.no_updates)
                     .label("Disable updates")
-                    .on_toggle(Message::UpdatesCheckbox)
+                    .on_toggle(Message::UpdatesCheckbox),
             ]
         ),
-        container(
-            button(text("Apply").size(13))
-                .style(primary_button_style)
-                .on_press(Message::ApplyButton)
-        )
-        .align_right(Fill)
+        row![
+            container(if state.confirm {
+                button(state.reset_button_label)
+                    .style(danger_button_style)
+                    .on_press(Message::ResetButton)
+            } else {
+                button(state.reset_button_label)
+                    .style(secondary_button_style)
+                    .on_press(Message::ResetButton)
+            })
+            .align_left(Fill),
+            container(
+                button(text("Apply").size(13))
+                    .style(primary_button_style)
+                    .on_press(Message::ApplyButton)
+            )
+            .align_right(Fill)
+        ]
     ]
     .spacing(space::SM)
     .width(Fill);
@@ -763,11 +874,7 @@ fn main() -> Result<()> {
 
             let (game_state, gui_state) = if !setup_finished_path.exists() {
                 if base_path.exists() {
-                    #[cfg(target_os = "linux")]
-                    std::fs::remove_dir_all(base_path).expect("Failed to clean up ~/Games/pd2lcp");
-
-                    #[cfg(target_os = "windows")]
-                    cleanup_base_win(base_path).expect("Failed to clean up A:\\");
+                    cleanup(base_path).expect("Failed to clean up");
                 }
 
                 #[cfg(target_os = "linux")]
@@ -784,25 +891,7 @@ fn main() -> Result<()> {
                 (Some(state_raw), GuiState::Main)
             };
 
-            let app = Launcher {
-                game_state: game_state.clone(),
-                gui_state,
-                settings,
-
-                error_prev_screen: None,
-
-                filter_authors: None,
-                filters: None,
-
-                launch_button_label: "Launch",
-                init_screen_text: "PD2LCP is not set up",
-
-                installing_progress: None,
-
-                launch_button_disabled: false,
-                allow_next: false,
-                disable_get_started: false,
-            };
+            let app = Launcher::default_with(game_state.clone(), gui_state, settings);
 
             let task = if update_flag {
                 Task::perform(install_pd2(game_state, EVENT_NOTIFY.clone()), |r| {
@@ -848,8 +937,13 @@ fn display_error(state: &mut Launcher, error: String) {
     state.gui_state = GuiState::Error(error);
 }
 
+#[cfg(target_os = "linux")]
+fn cleanup(path: &Path) -> Result<(), Error> {
+    std::fs::remove_dir_all(path).map_err(|e| e.into())
+}
+
 #[cfg(target_os = "windows")]
-fn cleanup_base_win(path: &Path) -> Result<(), Error> {
+fn cleanup(path: &Path) -> Result<(), Error> {
     use std::fs::read_dir;
 
     for entry in read_dir(path)? {
