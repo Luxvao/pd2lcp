@@ -838,13 +838,13 @@ fn main() -> Result<()> {
         default_hook(panic_info)
     }));
 
-    let mut args = std::env::args();
+    let args = std::env::args().collect::<Vec<String>>();
 
-    let fullscreen = args.any(|arg| arg == "-gamemode") || cfg!(feature = "gamemode");
+    let fullscreen = args.iter().any(|arg| arg == "-gamemode") || cfg!(feature = "gamemode");
 
     let mut update_flag = false;
 
-    if args.any(|arg| arg == "-skiplauncher") {
+    if args.iter().any(|arg| arg == "-skiplauncher") {
         // Here we just check if we have to update or not, then launch or update
         let state_raw = State::init_raw().expect("Failed to init state");
         let settings = state_raw.deserialise_settings();
@@ -952,7 +952,7 @@ fn cleanup(path: &Path) -> Result<(), Error> {
 
             // Skip the launcher itself
             if let Some(name) = entry.file_name() {
-                if name == "pd2lcp-iced.exe" {
+                if Some(name) == std::env::current_exe()?.file_name() {
                     continue;
                 }
             }
