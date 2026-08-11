@@ -1,5 +1,5 @@
 # PD2LCP
-PD2LCP is a modern cross-platform ish (more on that [here](#platforms)) written with Rust and Iced. It exists to enhance the user experience on certain unsupported platforms.
+PD2LCP is a modern cross-platform ish (more on that [here](#platforms)) Project Diablo 2 launcher written with Rust and Iced. It exists to enhance the user experience on certain unsupported platforms.
 
 ## Platforms
 PD2LCP is designed primarily for Linux and Android (running under Gamenative has been tested, Winlator/Gamehub should work fine too). On Linux it's a native app that installs and manages its own Wine prefix and directories, no Bottles needed. On Android it's
