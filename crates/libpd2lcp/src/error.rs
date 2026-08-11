@@ -24,6 +24,8 @@ pub enum Error {
     FailedToUntarArchive,
     #[error("this operation does not exist on this platform")]
     InvalidPlatform,
+    #[error("failed to parse filename")]
+    FailedToParseFilename,
     #[error("mutex poisoned")]
     PoisonError,
     #[error("{0}")]

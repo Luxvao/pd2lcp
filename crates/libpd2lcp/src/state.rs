@@ -114,8 +114,12 @@ impl State {
         self.game_files.join("Diablo II/ProjectD2")
     }
 
-    pub fn filter_dir(&self) -> PathBuf {
+    pub fn filter_dir_local(&self) -> PathBuf {
         self.pd2_dir().join("filters/local")
+    }
+
+    pub fn filter_dir_online(&self) -> PathBuf {
+        self.pd2_dir().join("filters/online")
     }
 
     pub fn wine_dir(&self) -> Result<&Path, Error> {
@@ -151,8 +155,10 @@ impl State {
             .map(|p| p.join("dosdevices").join(dosdevice))
     }
 
-    pub async fn serialise_settings(self, settings: Settings) -> Result<(), Error> {
-        let settings_file_path = self.base().join("settings.toml");
+    pub async fn serialise_settings(state: Option<State>, settings: Settings) -> Result<(), Error> {
+        let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
+
+        let settings_file_path = state.base().join("settings.toml");
 
         let mut settings_file = tokio::fs::File::create(&settings_file_path).await?;
 

@@ -2,19 +2,25 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
+use crate::filter::Filter;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum GraphicsMode {
     DDRAW,
     _3DFX,
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
     // Launch args
     pub graphics_mode: GraphicsMode,
     pub skiptobnet: bool,
     pub sndbkg: bool,
     pub no_updates: bool,
+
+    // I just cache filters here
+    pub downloaded_filters: Vec<Filter>,
+    pub active_filter: Option<Filter>,
 }
 
 impl Display for GraphicsMode {
@@ -33,6 +39,8 @@ impl Default for Settings {
             skiptobnet: true,
             sndbkg: false,
             no_updates: false,
+            downloaded_filters: Vec::new(),
+            active_filter: None,
         }
     }
 }

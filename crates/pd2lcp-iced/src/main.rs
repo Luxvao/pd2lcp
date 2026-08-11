@@ -9,12 +9,13 @@ use std::{
 use color_eyre::eyre::Result;
 use iced::{
     Alignment, Border, Color, Element,
-    Length::Fill,
+    Length::{self, Fill},
     Subscription, Task, Theme,
     futures::{SinkExt, Stream},
     stream,
     widget::{
-        Space, button, checkbox, column as col, container, pick_list, progress_bar, row, text,
+        Column, Space, button, checkbox, column as col, container, pick_list, progress_bar, row,
+        scrollable, text,
     },
 };
 
@@ -22,7 +23,10 @@ use libpd2lcp::{
     base_game::{install_d2, install_d2_lod},
     error::Error,
     event::{Event, EventNotify},
-    filter::{Filter, FilterGroup, get_filter_authors},
+    filter::{
+        Filter, FilterGroup, LOCAL_FILTER_GROUP, activate_filter, delete_filter, download_filter,
+        get_filter_authors, get_filters,
+    },
     launch::launch,
     pd2_updater::{install_pd2, update_available},
     settings::{GraphicsMode, Settings},
@@ -41,6 +45,8 @@ mod palette {
     pub const TEXT_SECONDARY: Color = Color::from_rgb(0.604, 0.604, 0.635); // #9a9aa2
     pub const ACCENT: Color = Color::from_rgb(0.357, 0.557, 0.937); // #5b8def
     pub const ERROR: Color = Color::from_rgb(0.898, 0.282, 0.298); // #e5484d
+    pub const ACTIVE: Color = Color::from_rgb(0.04, 0.91, 0.29); // #0be84b
+    pub const DOWNLOADED: Color = Color::from_rgb(0.98, 0.98, 0.0); // #fcfc02
 }
 
 mod space {
@@ -103,6 +109,20 @@ fn error_card_style(_theme: &Theme) -> container::Style {
     }
 }
 
+fn pick_list_style(_theme: &Theme, _status: pick_list::Status) -> pick_list::Style {
+    pick_list::Style {
+        text_color: Color::WHITE,
+        placeholder_color: Color::WHITE,
+        background: palette::SURFACE.into(),
+        handle_color: Color::WHITE,
+        border: Border {
+            radius: 8.0.into(),
+            color: palette::BORDER,
+            width: 1.0,
+        },
+    }
+}
+
 fn primary_button_style(_theme: &Theme, status: button::Status) -> button::Style {
     let base = palette::ACCENT;
     let background = match status {
@@ -123,6 +143,69 @@ fn primary_button_style(_theme: &Theme, status: button::Status) -> button::Style
     }
 }
 
+fn active_button_style_scrollable(_theme: &Theme, status: button::Status) -> button::Style {
+    let base = palette::ACTIVE;
+    let background = match status {
+        button::Status::Hovered => lighten(base, 0.06),
+        button::Status::Pressed => darken(base, 0.08),
+        button::Status::Disabled => Color { a: 0.35, ..base },
+        button::Status::Active => base,
+    };
+
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::BLACK,
+        border: Border {
+            radius: 0.0.into(),
+            width: 0.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+fn downloaded_button_style_scrollable(_theme: &Theme, status: button::Status) -> button::Style {
+    let base = palette::DOWNLOADED;
+    let background = match status {
+        button::Status::Hovered => lighten(base, 0.06),
+        button::Status::Pressed => darken(base, 0.08),
+        button::Status::Disabled => Color { a: 0.35, ..base },
+        button::Status::Active => base,
+    };
+
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::BLACK,
+        border: Border {
+            radius: 0.0.into(),
+            width: 0.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+fn primary_button_style_scrollable(_theme: &Theme, status: button::Status) -> button::Style {
+    let base = palette::ACCENT;
+    let background = match status {
+        button::Status::Hovered => lighten(base, 0.06),
+        button::Status::Pressed => darken(base, 0.08),
+        button::Status::Disabled => Color { a: 0.35, ..base },
+        button::Status::Active => base,
+    };
+
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::WHITE,
+        border: Border {
+            radius: 0.0.into(),
+            width: 0.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 fn secondary_button_style(_theme: &Theme, status: button::Status) -> button::Style {
     let border_color = match status {
         button::Status::Hovered => palette::ACCENT,
@@ -136,6 +219,24 @@ fn secondary_button_style(_theme: &Theme, status: button::Status) -> button::Sty
             color: border_color,
             width: 1.0,
             radius: 8.0.into(),
+        },
+        ..Default::default()
+    }
+}
+
+fn secondary_button_style_scrollable(_theme: &Theme, status: button::Status) -> button::Style {
+    let border_color = match status {
+        button::Status::Hovered => palette::ACCENT,
+        _ => palette::BORDER,
+    };
+
+    button::Style {
+        background: Some(Color::TRANSPARENT.into()),
+        text_color: palette::TEXT,
+        border: Border {
+            color: border_color,
+            width: 0.0,
+            radius: 0.0.into(),
         },
         ..Default::default()
     }
@@ -171,6 +272,37 @@ fn progress_style(_theme: &Theme) -> progress_bar::Style {
     }
 }
 
+fn scrollable_style(theme: &Theme, status: scrollable::Status) -> scrollable::Style {
+    scrollable::Style {
+        container: container::Style {
+            background: Some(palette::BACKGROUND.into()),
+            border: Border {
+                color: palette::BORDER,
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            ..Default::default()
+        },
+        vertical_rail: scrollable::Rail {
+            background: Some(palette::BACKGROUND.into()),
+            border: Border {
+                color: palette::BORDER,
+                width: 1.0,
+                radius: 0.0.into(),
+            },
+            scroller: scrollable::Scroller {
+                background: palette::SURFACE.into(),
+                border: Border {
+                    color: palette::BORDER,
+                    width: 1.0,
+                    radius: 0.0.into(),
+                },
+            },
+        },
+        ..scrollable::default(theme, status)
+    }
+}
+
 fn settings_section<'a>(
     title: &'a str,
     content: impl Into<Element<'a, Message>>,
@@ -191,6 +323,7 @@ fn page<'a>(content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
         container(content)
             .padding(space::XL)
             .max_width(420.0)
+            .max_height(500.0)
             .style(card_style),
     )
     .width(Fill)
@@ -219,6 +352,8 @@ struct Launcher {
 
     // Runtime values
     // Filter stuff
+    selected_author: Option<FilterGroup>,
+    selected_filter: Option<Filter>,
     filter_authors: Option<Vec<FilterGroup>>,
     filters: Option<Vec<Filter>>,
 
@@ -228,11 +363,14 @@ struct Launcher {
     init_screen_text: &'static str,
 
     // Progress
+    downloading_filter: bool,
     installing_progress: Option<(u32, u32)>,
 
     launch_button_disabled: bool,
     allow_next: bool,
     disable_get_started: bool,
+
+    disallow_filter_group_switching: bool,
 
     // Reset confirm
     confirm: bool,
@@ -251,6 +389,8 @@ impl Launcher {
 
             error_prev_screen: None,
 
+            selected_author: None,
+            selected_filter: None,
             filter_authors: None,
             filters: None,
 
@@ -258,11 +398,14 @@ impl Launcher {
             reset_button_label: "Reset",
             init_screen_text: "PD2LCP is not set up",
 
+            downloading_filter: false,
             installing_progress: None,
 
             launch_button_disabled: false,
             allow_next: false,
             disable_get_started: false,
+
+            disallow_filter_group_switching: false,
 
             confirm: false,
         }
@@ -282,32 +425,61 @@ enum GuiState {
 
 #[derive(Clone, Debug)]
 enum Message {
-    Fallible(Result<(), String>),
-    InstallerExit(Result<(), String>),
-    LaunchTask(Result<(), String>),
+    // Events
     NotifyEvent(Event),
+
+    // Task results
+    Fallible(Result<(), String>),
+
+    InstallerExit(Result<(), String>),
     InitGameState(Result<State, String>),
-    InitButton,
+    LaunchTask(Result<(), String>),
     UpdateCheckTask(Result<bool, String>),
     UpdateTask(Result<(), String>),
-    LaunchButton,
-    SettingsButton,
-    ExitButton,
+    GetFiltersTask(Result<Vec<Filter>, String>),
+    FetchAuthorsTask(Result<Vec<FilterGroup>, String>),
+
+    // Settings
     GraphicsMode(GraphicsMode),
     SoundCheckbox(bool),
     BnetCheckbox(bool),
     UpdatesCheckbox(bool),
+
+    // Installers selected
     D2InstallerSelected(Option<PathBuf>),
     LODInstallerSelected(Option<PathBuf>),
-    ApplyButton,
-    ReturnButton,
-    NextButton,
+
+    // Filters sceren
+    FilterAuthorSelected(FilterGroup),
+    FilterSelected(Filter),
+
+    // Buttons
+    // Init screen
+    InitButton,
+
+    // Set up D2 & LOD screens
     FilePickerButtonD2,
     FilePickerButtonLOD,
-    ErrorReturnButton,
-    ResetButton,
+    NextButton,
+
+    // Main screen
+    LaunchButton,
+    SettingsButton,
+    ExitButton,
     FilterButton,
-    FetchAuthorsTask(Result<Vec<FilterGroup>, String>),
+
+    // Error screen
+    ErrorReturnButton,
+
+    // Settings screen
+    ApplyButton,
+    ResetButton,
+
+    // Filter screen
+    ActivateButton,
+    ReturnButton,
+    DownloadButton,
+    RemoveButton,
 }
 
 fn update(state: &mut Launcher, message: Message) -> Task<Message> {
@@ -434,17 +606,14 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
         Message::SoundCheckbox(b) => state.settings.sndbkg = b,
         Message::BnetCheckbox(b) => state.settings.skiptobnet = b,
         Message::UpdatesCheckbox(b) => state.settings.no_updates = b,
-        Message::ApplyButton => match state.game_state.as_ref() {
-            Some(game_state) => {
-                state.gui_state = GuiState::Main;
+        Message::ApplyButton => {
+            state.gui_state = GuiState::Main;
 
-                return Task::perform(
-                    State::serialise_settings(game_state.clone(), state.settings.clone()),
-                    |res| Message::Fallible(res.map_err(|e| e.to_string())),
-                );
-            }
-            None => display_error(state, Error::Pd2lcpNotInitialised.to_string()),
-        },
+            return Task::perform(
+                State::serialise_settings(state.game_state.clone(), state.settings.clone()),
+                |res| Message::Fallible(res.map_err(|e| e.to_string())),
+            );
+        }
         Message::ErrorReturnButton => {
             if let Some(prev) = state.error_prev_screen.take() {
                 state.gui_state = prev;
@@ -461,9 +630,18 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
                     |r| Message::LaunchTask(r.map_err(|e| e.to_string())),
                 );
             } else {
-                return Task::perform(update_available(state.game_state.clone()), |r| {
-                    Message::UpdateCheckTask(r.map_err(|e| e.to_string()))
-                });
+                return Task::perform(
+                    activate_filter(
+                        state.game_state.clone(),
+                        state.settings.active_filter.clone(),
+                        EVENT_NOTIFY.clone(),
+                    ),
+                    |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                )
+                .chain(Task::perform(
+                    update_available(state.game_state.clone()),
+                    |r| Message::UpdateCheckTask(r.map_err(|e| e.to_string())),
+                ));
             }
         }
         Message::UpdateCheckTask(res) => {
@@ -516,17 +694,97 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             Event::FinishedDownloadingWine => (),
             Event::InitPrefix => state.init_screen_text = "Setting up the prefix...",
             Event::FinishedInitPrefix => state.init_screen_text = "Done!",
+            Event::UpdatingFilter => state.downloading_filter = true,
+            Event::DoneUpdatingFilter => state.downloading_filter = false,
         },
         Message::FilterButton => {
+            state.filters = None;
+            state.selected_filter = None;
+            state.selected_author = None;
+            state.gui_state = GuiState::Filters;
+
             return Task::perform(get_filter_authors(), |r| {
                 Message::FetchAuthorsTask(r.map_err(|e| e.to_string()))
             });
+        }
+        Message::FilterAuthorSelected(fg) => {
+            state.selected_filter = None;
+            state.selected_author = Some(fg.clone());
+            state.disallow_filter_group_switching = true;
+
+            return Task::perform(get_filters(state.game_state.clone(), fg), |r| {
+                Message::GetFiltersTask(r.map_err(|e| e.to_string()))
+            });
+        }
+        Message::GetFiltersTask(res) => {
+            state.disallow_filter_group_switching = false;
+
+            let _ = handle_fallible(state, res, |state, filters| {
+                state.filters = Some(filters);
+                None
+            });
+        }
+        Message::FilterSelected(f) => {
+            state.selected_filter = Some(f);
         }
         Message::FetchAuthorsTask(res) => {
             let _ = handle_fallible(state, res, |state, authors| {
                 state.filter_authors = Some(authors);
                 None
             });
+        }
+        Message::ActivateButton => {
+            state.settings.active_filter = state.selected_filter.clone();
+
+            return Task::perform(
+                State::serialise_settings(state.game_state.clone(), state.settings.clone()),
+                |r| Message::Fallible(r.map_err(|e| e.to_string())),
+            );
+        }
+        Message::DownloadButton => {
+            if let Some(ref sel_filter) = state.selected_filter {
+                state.settings.downloaded_filters.push(sel_filter.clone());
+
+                return Task::perform(
+                    download_filter(state.game_state.clone(), sel_filter.clone()),
+                    |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                )
+                .chain(Task::perform(
+                    State::serialise_settings(state.game_state.clone(), state.settings.clone()),
+                    |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                ));
+            }
+        }
+        Message::RemoveButton => {
+            if let Some(ref sel_filter) = state.selected_filter {
+                state
+                    .settings
+                    .downloaded_filters
+                    .retain(|i| i != sel_filter);
+
+                if state.settings.active_filter.as_ref() == Some(sel_filter) {
+                    state.settings.active_filter = None;
+                }
+
+                return Task::perform(
+                    delete_filter(state.game_state.clone(), sel_filter.clone()),
+                    |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                )
+                .chain(Task::perform(
+                    State::serialise_settings(state.game_state.clone(), state.settings.clone()),
+                    |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                ))
+                .chain(if sel_filter.grouping.name.as_str() == "Local" {
+                    state.selected_filter = None;
+
+                    Task::perform(
+                        get_filters(state.game_state.clone(), LOCAL_FILTER_GROUP.clone()),
+                        |r| Message::GetFiltersTask(r.map_err(|e| e.to_string())),
+                    )
+                } else {
+                    Task::none()
+                });
+            }
         }
     }
 
@@ -552,18 +810,15 @@ fn init_screen(state: &Launcher) -> Element<'_, Message> {
             .size(14)
             .color(palette::TEXT_SECONDARY),
         Space::new().height(space::MD),
-        if state.disable_get_started {
-            button(text("Get Started").center())
-                .width(Fill)
-                .padding(space::MD)
-                .style(primary_button_style)
-        } else {
-            button(text("Get Started").center())
-                .on_press(Message::InitButton)
-                .width(Fill)
-                .padding(space::MD)
-                .style(primary_button_style)
-        }
+        button(text("Get Started").center())
+            .on_press_maybe(if !state.disable_get_started {
+                Some(Message::InitButton)
+            } else {
+                None
+            })
+            .width(Fill)
+            .padding(space::MD)
+            .style(primary_button_style)
     ]
     .spacing(space::SM)
     .width(Fill);
@@ -585,18 +840,15 @@ fn install_d2_screen(state: &Launcher) -> Element<'_, Message> {
             .padding(space::MD)
             .style(secondary_button_style),
         Space::new().height(space::SM),
-        if state.allow_next {
-            button(text("Next").center())
-                .on_press(Message::NextButton)
-                .width(Fill)
-                .padding(space::MD)
-                .style(primary_button_style)
-        } else {
-            button(text("Next").center())
-                .width(Fill)
-                .padding(space::MD)
-                .style(primary_button_style)
-        }
+        button(text("Next").center())
+            .on_press_maybe(if state.allow_next {
+                Some(Message::NextButton)
+            } else {
+                None
+            })
+            .width(Fill)
+            .padding(space::MD)
+            .style(primary_button_style)
     ]
     .spacing(space::SM)
     .width(Fill);
@@ -620,18 +872,11 @@ fn install_d2_lod_screen(state: &Launcher) -> Element<'_, Message> {
             .padding(space::MD)
             .style(secondary_button_style),
         Space::new().height(space::SM),
-        if state.allow_next {
             button(text("Next").center())
-                .on_press(Message::NextButton)
+                .on_press_maybe(if state.allow_next {Some(Message::NextButton)} else {None})
                 .width(Fill)
                 .padding(space::MD)
                 .style(primary_button_style)
-        } else {
-            button(text("Next").center())
-                .width(Fill)
-                .padding(space::MD)
-                .style(primary_button_style)
-        }
     ]
     .spacing(space::SM)
     .width(Fill);
@@ -645,6 +890,11 @@ fn main_screen(state: &Launcher) -> Element<'_, Message> {
             .size(20)
             .color(palette::TEXT)
             .width(Fill),
+        button(text("Filters").size(13))
+            .on_press(Message::FilterButton)
+            .padding([space::XS, space::SM])
+            .style(secondary_button_style),
+        Space::new().width(space::MD),
         button(text("Settings").size(13))
             .on_press(Message::SettingsButton)
             .padding([space::XS, space::SM])
@@ -661,18 +911,17 @@ fn main_screen(state: &Launcher) -> Element<'_, Message> {
         .spacing(space::SM)
         .width(Fill);
 
-    content = content.push(if state.launch_button_disabled {
+    content = content.push(
         button(text(state.launch_button_label).center())
+            .on_press_maybe(if !state.launch_button_disabled {
+                Some(Message::LaunchButton)
+            } else {
+                None
+            })
             .width(Fill)
             .padding(space::MD)
-            .style(primary_button_style)
-    } else {
-        button(text(state.launch_button_label).center())
-            .on_press(Message::LaunchButton)
-            .width(Fill)
-            .padding(space::MD)
-            .style(primary_button_style)
-    });
+            .style(primary_button_style),
+    );
 
     if let Some((done, total)) = state.installing_progress {
         content = content.push(Space::new().height(space::MD));
@@ -686,6 +935,16 @@ fn main_screen(state: &Launcher) -> Element<'_, Message> {
             ]
             .spacing(space::XS)
             .width(Fill),
+        );
+    }
+
+    if state.downloading_filter {
+        content = content.push(Space::new().height(space::MD));
+
+        content = content.push(
+            text("Downloading filter")
+                .size(13)
+                .color(palette::TEXT_SECONDARY),
         );
     }
 
@@ -715,17 +974,7 @@ fn settings_screen(state: &Launcher) -> Element<'_, Message> {
                     Some(state.settings.graphics_mode),
                     Message::GraphicsMode
                 )
-                .style(|_, _| pick_list::Style {
-                    text_color: Color::WHITE,
-                    placeholder_color: Color::WHITE,
-                    background: palette::SURFACE.into(),
-                    handle_color: Color::WHITE,
-                    border: Border {
-                        radius: 8.0.into(),
-                        color: palette::BORDER,
-                        width: 1.0,
-                    },
-                })
+                .style(pick_list_style)
             ]
             .align_y(Alignment::Center)
         ),
@@ -750,15 +999,15 @@ fn settings_screen(state: &Launcher) -> Element<'_, Message> {
             ]
         ),
         row![
-            container(if state.confirm {
+            container(
                 button(state.reset_button_label)
-                    .style(danger_button_style)
+                    .style(if state.confirm {
+                        danger_button_style
+                    } else {
+                        secondary_button_style
+                    })
                     .on_press(Message::ResetButton)
-            } else {
-                button(state.reset_button_label)
-                    .style(secondary_button_style)
-                    .on_press(Message::ResetButton)
-            })
+            )
             .align_left(Fill),
             container(
                 button(text("Apply").size(13))
@@ -802,7 +1051,157 @@ fn error_screen(message: &str) -> Element<'_, Message> {
 }
 
 fn filters_screen(state: &Launcher) -> Element<'_, Message> {
-    todo!()
+    let header = row![
+        text("Filters").size(20).color(palette::TEXT).width(Fill),
+        button(text("Return").size(13))
+            .on_press(Message::ReturnButton)
+            .style(secondary_button_style)
+    ];
+
+    let mut selections = row![];
+
+    let authors_selection = scrollable(
+        Column::with_children(if let Some(ref authors) = state.filter_authors {
+            authors
+                .iter()
+                .map(|a| {
+                    button(a.name.as_str())
+                        .on_press_maybe(if state.disallow_filter_group_switching {
+                            None
+                        } else {
+                            Some(Message::FilterAuthorSelected(a.clone()))
+                        })
+                        .width(Fill)
+                        .style(if Some(a) == state.selected_author.as_ref() {
+                            primary_button_style_scrollable
+                        } else {
+                            secondary_button_style_scrollable
+                        })
+                        .into()
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        })
+        .spacing(space::XS),
+    )
+    .style(scrollable_style)
+    .height(Fill)
+    .width(Length::FillPortion(1));
+
+    selections = selections.push(authors_selection);
+
+    selections = selections.push(Space::new().width(space::XS));
+
+    let filters_selection = scrollable(Column::with_children(
+        if let Some(ref filters) = state.filters {
+            filters
+                .iter()
+                .map(|f| {
+                    button(f.name.as_str())
+                        .on_press_maybe(if state.disallow_filter_group_switching {
+                            None
+                        } else {
+                            Some(Message::FilterSelected(f.clone()))
+                        })
+                        .width(Fill)
+                        .style(if Some(f) == state.selected_filter.as_ref() {
+                            primary_button_style_scrollable
+                        } else if Some(f) == state.settings.active_filter.as_ref() {
+                            active_button_style_scrollable
+                        } else if state.settings.downloaded_filters.contains(f) {
+                            downloaded_button_style_scrollable
+                        } else {
+                            secondary_button_style_scrollable
+                        })
+                        .into()
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        },
+    ))
+    .style(scrollable_style)
+    .height(Fill)
+    .width(Length::FillPortion(1));
+
+    selections = selections.push(filters_selection);
+
+    let controls = row![
+        button("Activate")
+            .on_press_maybe(
+                if state.selected_filter.is_some()
+                    && state.settings.active_filter != state.selected_filter
+                    && (state
+                        .settings
+                        .downloaded_filters
+                        .iter()
+                        .any(|f| Some(f) == state.selected_filter.as_ref())
+                        || state
+                            .selected_filter
+                            .as_ref()
+                            .map(|f| f.grouping.name.as_str() == "Local")
+                            .unwrap_or(false))
+                {
+                    Some(Message::ActivateButton)
+                } else {
+                    None
+                }
+            )
+            .style(primary_button_style),
+        Space::new().width(space::XS),
+        button("Download")
+            .on_press_maybe(
+                if state.selected_filter.is_some()
+                    && !state
+                        .settings
+                        .downloaded_filters
+                        .iter()
+                        .any(|f| Some(f) == state.selected_filter.as_ref())
+                    && state
+                        .selected_filter
+                        .as_ref()
+                        .map(|f| f.grouping.name.as_str() != "Local")
+                        .unwrap_or(false)
+                {
+                    Some(Message::DownloadButton)
+                } else {
+                    None
+                }
+            )
+            .style(primary_button_style),
+        Space::new().width(space::XS),
+        button("Remove")
+            .on_press_maybe(
+                if state.selected_filter.is_some()
+                    && (state
+                        .settings
+                        .downloaded_filters
+                        .iter()
+                        .any(|f| Some(f) == state.selected_filter.as_ref())
+                        || state
+                            .selected_filter
+                            .as_ref()
+                            .map(|f| f.grouping.name.as_str() == "Local")
+                            .unwrap_or(false))
+                {
+                    Some(Message::RemoveButton)
+                } else {
+                    None
+                }
+            )
+            .style(primary_button_style),
+    ];
+
+    let content = col![
+        header,
+        Space::new().height(space::MD),
+        selections,
+        Space::new().height(space::MD),
+        controls
+    ];
+
+    page(content)
 }
 
 fn worker() -> impl Stream<Item = Message> {

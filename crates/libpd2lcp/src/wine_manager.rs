@@ -4,8 +4,6 @@ use tokio::{
     process::Command,
 };
 
-use std::io::Write;
-
 use crate::{error::Error, state::State};
 
 pub const WINE_URL: &str = "https://github.com/Kron4ek/Wine-Builds/releases/download/11.14/wine-11.14-staging-tkg-amd64.tar.xz";

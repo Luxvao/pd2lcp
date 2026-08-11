@@ -17,6 +17,8 @@ pub enum Event {
     FinishedInitPrefix,
     UpdatingPD2 { done: u32, total: u32 },
     DoneUpdating,
+    UpdatingFilter,
+    DoneUpdatingFilter,
 }
 
 #[derive(Clone, Default, Debug)]
