@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    error::Error,
+    error::{Error, ResultContextExt},
     event::{Event, EventNotify},
     state::State,
 };
@@ -72,7 +72,11 @@ impl Filter {
 }
 
 pub async fn get_filter_authors() -> Result<Vec<FilterGroup>, Error> {
-    let filter_groups_list_json = reqwest::get(FILTER_GROUPS_LIST).await?.text().await?;
+    let filter_groups_list_json = reqwest::get(FILTER_GROUPS_LIST)
+        .await
+        .context("Failed to download filter author list. Are you connected to the internet?")?
+        .text()
+        .await?;
 
     let mut filters = vec![LOCAL_FILTER_GROUP.clone()];
 
@@ -139,7 +143,13 @@ pub async fn get_filters(state: Option<State>, group: FilterGroup) -> Result<Vec
         })
         .build()?;
 
-    let filters_json = client.get(&group.url).send().await?.text().await?;
+    let filters_json = client
+        .get(&group.url)
+        .send()
+        .await
+        .context("Failed to fetch filters metadata")?
+        .text()
+        .await?;
 
     Ok(serde_json::from_str::<Vec<GhResp>>(&filters_json)
         .unwrap_or_default()
@@ -163,7 +173,11 @@ pub async fn download_filter(state: Option<State>, filter: Filter) -> Result<(),
 
     tokio::fs::create_dir_all(&filter_dir_online).await?;
 
-    let filter_contents = reqwest::get(&filter.url).await?.bytes().await?;
+    let filter_contents = reqwest::get(&filter.url)
+        .await
+        .context("Failed to download filter. Are you connected to the internet?")?
+        .bytes()
+        .await?;
 
     let filter_file_path = filter_dir_online.join(filter.get_filename());
 

@@ -26,6 +26,11 @@ pub enum Environment {
 impl State {
     #[cfg(target_os = "linux")]
     pub async fn init(notify: EventNotify) -> Result<State, Error> {
+        use crate::{
+            event::Event,
+            wine_manager::{create_prefix, fetch_wine},
+        };
+
         let home = dirs::home_dir().ok_or(Error::NoHomeDir)?;
 
         let state = State {
@@ -37,29 +42,37 @@ impl State {
             },
         };
 
-        if !state.game_files.is_dir() {
-            std::fs::create_dir_all(&state.game_files)?;
+        if state.game_files.is_dir() {
+            tokio::fs::remove_dir_all(&state.game_files).await?;
         }
 
-        if !state.wine_dir()?.is_dir() {
-            use crate::{event::Event, wine_manager::fetch_wine};
+        tokio::fs::create_dir_all(&state.game_files).await?;
 
-            notify.notify(Event::DownloadingWine)?;
+        // Wine files
+        let wine_files = state.wine_dir()?;
 
-            fetch_wine(&state).await?;
-
-            notify.notify(Event::FinishedDownloadingWine)?;
+        if wine_files.is_dir() {
+            tokio::fs::remove_dir_all(wine_files).await?;
         }
 
-        if !state.wine_prefix()?.is_dir() {
-            use crate::{event::Event, wine_manager::create_prefix};
+        notify.notify(Event::DownloadingWine)?;
 
-            notify.notify(Event::InitPrefix)?;
+        fetch_wine(&state).await?;
 
-            create_prefix(&state).await?;
+        notify.notify(Event::FinishedDownloadingWine)?;
 
-            notify.notify(Event::FinishedInitPrefix)?;
+        // Wine prefix
+        let prefix = state.wine_prefix()?;
+
+        if prefix.is_dir() {
+            tokio::fs::remove_dir_all(prefix).await?;
         }
+
+        notify.notify(Event::InitPrefix)?;
+
+        create_prefix(&state).await?;
+
+        notify.notify(Event::FinishedInitPrefix)?;
 
         Ok(state)
     }
@@ -106,12 +119,16 @@ impl State {
         &self.base
     }
 
-    pub fn d2_dir(&self) -> &Path {
+    pub fn game_dir(&self) -> &Path {
         &self.game_files
     }
 
+    pub fn d2_dir(&self) -> PathBuf {
+        self.game_files.join("Diablo II")
+    }
+
     pub fn pd2_dir(&self) -> PathBuf {
-        self.game_files.join("Diablo II/ProjectD2")
+        self.d2_dir().join("ProjectD2")
     }
 
     pub fn filter_dir_local(&self) -> PathBuf {

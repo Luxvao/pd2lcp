@@ -4,7 +4,7 @@ use tokio::{
 };
 
 use crate::{
-    error::Error,
+    error::{Error, ResultContextExt},
     event::{Event, EventNotify},
     metadata::{GameFileMetadata, get_metadata},
     state::State,
@@ -22,13 +22,19 @@ pub async fn update_available(state: Option<State>) -> Result<bool, Error> {
         return Ok(true);
     }
 
-    let mut local_metadata_file = File::open(&local_metadata_path).await?;
+    let mut local_metadata_file = File::open(&local_metadata_path)
+        .await
+        .context("Failed to open local metadata")?;
 
     let mut buffer = Vec::new();
 
-    local_metadata_file.read_to_end(&mut buffer).await?;
+    local_metadata_file
+        .read_to_end(&mut buffer)
+        .await
+        .context("Failed to read local metadata")?;
 
-    let local_metadata: Vec<GameFileMetadata> = serde_json::from_slice(&buffer)?;
+    let local_metadata: Vec<GameFileMetadata> =
+        serde_json::from_slice(&buffer).context("Failed to deserialise local metadata")?;
 
     if local_metadata != remote_metadata {
         return Ok(true);
@@ -63,11 +69,20 @@ pub async fn install_pd2(state: Option<State>, notify: EventNotify) -> Result<()
         let output_file_path = pd2_files.join(&file_metadata.name);
 
         if !output_file_path.exists() {
-            let data = reqwest::get(&file_metadata.url).await?.bytes().await?;
+            let data = reqwest::get(&file_metadata.url)
+                .await
+                .context("Failed to download pd2 file")?
+                .bytes()
+                .await?;
 
-            let mut output_file = File::create(&output_file_path).await?;
+            let mut output_file = File::create(&output_file_path)
+                .await
+                .context("Failed to create pd2 file")?;
 
-            output_file.write_all(&data).await?;
+            output_file
+                .write_all(&data)
+                .await
+                .context("Failed to write pd2 file")?;
 
             continue;
         }
@@ -85,24 +100,37 @@ pub async fn install_pd2(state: Option<State>, notify: EventNotify) -> Result<()
         let local_hash = compute_hash(&buffer)?;
 
         if file_metadata.checksum != local_hash {
-            let data = reqwest::get(&file_metadata.url).await?.bytes().await?;
+            let data = reqwest::get(&file_metadata.url)
+                .await
+                .context("Failed to download pd2 file")?
+                .bytes()
+                .await?;
 
             // We seek to 0 and write everything
             output_file.seek(std::io::SeekFrom::Start(0)).await?;
             output_file.set_len(0).await?;
 
-            output_file.write_all(&data).await?;
+            output_file
+                .write_all(&data)
+                .await
+                .context("Failed to write pd2 file")?;
         }
     }
 
     // Now we write to the local_metadata.json file
     let local_metadata_path = pd2_files.join("local_metadata.json");
 
-    let mut local_metadata_file = File::create(local_metadata_path).await?;
+    let mut local_metadata_file = File::create(local_metadata_path)
+        .await
+        .context("Failed to create local metadata file")?;
 
-    let serialised = serde_json::to_vec_pretty(&metadata_game_files)?;
+    let serialised =
+        serde_json::to_vec_pretty(&metadata_game_files).context("Failed to serialise metadata")?;
 
-    local_metadata_file.write_all(&serialised).await?;
+    local_metadata_file
+        .write_all(&serialised)
+        .await
+        .context("Failed to write local metadata file")?;
 
     notify.notify(Event::DoneUpdating)?;
 

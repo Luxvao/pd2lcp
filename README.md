@@ -7,9 +7,7 @@ designed to run under Gamenative as a Windows executable (that does not mean it'
 
 ## Installation
 ### Both
-It is **VERY IMPORTANT** to **ALWAYS** install the base D2 game under "A:\\Diablo II". PD2LCP assumes you're installing there and will not work otherwise. This is to make sure it functions well under Gamenative.
-
-The installers themselves can prove quite janky. One specific quirk of theirs is that I cannot accurately track when the installation of the base game completed successfully, therefore it's important to let the installers finish. After the first downloader
+The D2 and LOD installers themselves can prove quite janky. One specific quirk of theirs is that I cannot accurately track when the installation of the base game completed successfully, therefore it's important to let the installers finish. After the first downloader
 exits, there will also be a second proper installer, and only after you've gone through that one is the game installed. If anything's broken by the end, there is a reset button in the settings that will **WIPE THE ENTIRE INSTALL**, letting you start from scratch.
 
 ### Linux
@@ -39,7 +37,7 @@ Android is a bit more involved, since you're in an externally managed Wine envir
   1. Download `pd2lcp-iced.exe`.
   2. Go into your Files app and create a new folder anywhere (I personally like to call it "Project Diablo 2", which will be mirrored in Gamenative). This will be the base for your Gamenative container.
   3. Open Gamenative and add a custom game (little plus icon in the top right). It is very important to be on the **Github** version of Gamenative, as the Play Store one does not contain that button or the ability to add custom games.
-  4. Move `pd2lcp-iced.exe` into the folder you made in step #2 (don't rename the executable, it's important).
+  4. Move `pd2lcp-iced.exe` into the folder you made in step #2.
   5. Open container settings in Gamenative and set the executable to `pd2lcp-iced.exe`. You must also set the Proton version to the `x86_64` one, I haven't had the installers open under arm ec builds.
   6. Now just launch the game and the launcher will open.
   7. You will be prompted to select the D2 installer. The D:\\ drive will point to your phone's Downloads folder, so the installers should be there. I haven't figured out how to paste the CD keys under Gamenative so you'll have to write them manually.

@@ -2,32 +2,69 @@ use std::sync::PoisonError;
 
 use thiserror::Error;
 
+pub trait ResultContextExt<T> {
+    fn context(self, ctx: &str) -> Result<T, Error>;
+    fn with_context<F: FnOnce(&Error) -> String>(self, f: F) -> Result<T, Error>;
+}
+
+impl<T, E: Into<Error>> ResultContextExt<T> for Result<T, E> {
+    fn context(self, ctx: &str) -> Result<T, Error> {
+        self.map_err(|e| {
+            let e = e.into();
+
+            Error::Context {
+                message: format!("Context: {ctx}\nError:{}", e.to_string()),
+                source: Box::new(e),
+            }
+        })
+    }
+
+    fn with_context<F: FnOnce(&Error) -> String>(self, f: F) -> Result<T, Error> {
+        self.map_err(|e| {
+            let e = e.into();
+
+            Error::Context {
+                message: f(&e),
+                source: Box::new(e),
+            }
+        })
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("pd2 is not initialised")]
+    #[error("{message}")]
+    Context {
+        message: String,
+        #[source]
+        source: Box<Error>,
+    },
+    #[error("PD2 is not initialised")]
     Pd2lcpNotInitialised,
-    #[error("installation is corrupted")]
+    #[error("Installation is corrupted")]
     InstallCorrupted,
-    #[error("invalid game file data metadata")]
+    #[error("Invalid game file data metadata")]
     InvalidMetadata,
-    #[error("wine initialisation failed")]
+    #[error("Wine initialisation failed")]
     WineInitFailed,
-    #[error("no home directory")]
+    #[error("No home directory")]
     NoHomeDir,
-    #[error("provided state is invalid")]
+    #[error("Provided state is invalid")]
     InvalidState,
-    #[error("failed to install d2")]
+    #[error("Failed to install d2")]
     FailedToInstallD2,
-    #[error("failed to install d2 lod")]
+    #[error("Failed to install d2 lod")]
     FailedToInstallD2LOD,
-    #[error("unable to untar the archive. Is tar installed?")]
+    #[error("Unable to untar the archive. Is tar installed?")]
     FailedToUntarArchive,
-    #[error("this operation does not exist on this platform")]
+    #[error("This operation does not exist on this platform")]
     InvalidPlatform,
-    #[error("failed to parse filename")]
+    #[error("Failed to parse filename")]
     FailedToParseFilename,
-    #[error("mutex poisoned")]
+    #[error("Mutex poisoned")]
     PoisonError,
+    #[error("D2 is not installed correctly, reinstall")]
+    D2InstalledIncorrectly,
     #[error("{0}")]
     ReqwestError(#[from] reqwest::Error),
     #[error("{0}")]

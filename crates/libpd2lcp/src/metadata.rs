@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::error::Error;
+use crate::error::{Error, ResultContextExt};
 
 pub const METADATA_ENDPOINT: &str = "https://pd2-client-files.projectdiablo2.com";
 
@@ -46,9 +46,14 @@ impl TryFrom<GameFilesMetadataRaw> for Vec<GameFileMetadata> {
 pub async fn get_metadata() -> Result<Vec<GameFileMetadata>, Error> {
     let metadata_url = format!("{}/metadata.json", METADATA_ENDPOINT);
 
-    let text = reqwest::get(metadata_url).await?.text().await?;
+    let text = reqwest::get(metadata_url)
+        .await
+        .context("Failed to download metadata. Are you connected to the internet?")?
+        .text()
+        .await?;
 
-    let metadata_raw: GameFilesMetadataRaw = serde_json::from_str(&text)?;
+    let metadata_raw: GameFilesMetadataRaw =
+        serde_json::from_str(&text).context("Failed to parse metadata")?;
 
     metadata_raw.try_into()
 }

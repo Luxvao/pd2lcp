@@ -1,25 +1,37 @@
 use tokio::{
-    fs::{File, create_dir, create_dir_all, read_dir, rename},
+    fs::{File, create_dir_all, read_dir, rename},
     io::AsyncWriteExt,
     process::Command,
 };
 
-use crate::{error::Error, state::State};
+use crate::{
+    error::{Error, ResultContextExt},
+    state::State,
+};
 
 pub const WINE_URL: &str = "https://github.com/Kron4ek/Wine-Builds/releases/download/11.14/wine-11.14-staging-tkg-amd64.tar.xz";
 
 pub async fn fetch_wine(state: &State) -> Result<(), Error> {
     let install_path = state.wine_dir()?;
 
-    create_dir(install_path).await?;
+    create_dir_all(install_path).await?;
 
-    let wine_bytes = reqwest::get(WINE_URL).await?.bytes().await?;
+    let wine_bytes = reqwest::get(WINE_URL)
+        .await
+        .context("Failed to download Wine. Check your internet.")?
+        .bytes()
+        .await?;
 
     let wine_archive_path = install_path.join("wine_tarball.tar.xz");
 
-    let mut wine_archive_file = File::create(&wine_archive_path).await?;
+    let mut wine_archive_file = File::create(&wine_archive_path)
+        .await
+        .context("Failed to create wine archive")?;
 
-    wine_archive_file.write_all(&wine_bytes).await?;
+    wine_archive_file
+        .write_all(&wine_bytes)
+        .await
+        .context("Failed to write wine archive")?;
 
     // Now we untar it
     let status = Command::new("tar")
@@ -28,16 +40,17 @@ pub async fn fetch_wine(state: &State) -> Result<(), Error> {
         .arg("-C")
         .arg(install_path)
         .status()
-        .await?;
+        .await
+        .context("Do you have tar installed?")?;
 
     if !status.success() {
         return Err(Error::FailedToUntarArchive);
     }
 
-    while let Ok(Some(file)) = read_dir(install_path.join("wine-11.14-staging-tkg-amd64"))
+    while let Some(file) = read_dir(install_path.join("wine-11.14-staging-tkg-amd64"))
         .await?
         .next_entry()
-        .await
+        .await?
     {
         rename(file.path(), install_path.join(file.file_name())).await?;
     }
@@ -80,7 +93,9 @@ pub async fn create_prefix(state: &State) -> Result<(), Error> {
         return Err(Error::WineInitFailed);
     }
 
-    std::os::unix::fs::symlink(state.d2_dir(), state.wine_dosdevice("a:")?)?;
+    tokio::fs::symlink(state.game_dir(), state.wine_dosdevice("a:")?)
+        .await
+        .context("Failed to symlink games folder -> a: dosdevice")?;
 
     // Now we kill wineserver to update dosdevices
     let status_wineserver = Command::new(state.wine_exe("wineserver")?)

@@ -20,7 +20,7 @@ use iced::{
 };
 
 use libpd2lcp::{
-    base_game::{install_d2, install_d2_lod},
+    base_game::{install_d2, install_d2_lod, relocate_files},
     error::Error,
     event::{Event, EventNotify},
     filter::{
@@ -438,6 +438,7 @@ enum Message {
     UpdateTask(Result<(), String>),
     GetFiltersTask(Result<Vec<Filter>, String>),
     FetchAuthorsTask(Result<Vec<FilterGroup>, String>),
+    RelocateFilesTask(Result<(), String>),
 
     // Settings
     GraphicsMode(GraphicsMode),
@@ -522,10 +523,8 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             let _ = handle_fallible(state, res, |_, _| None);
         }
         Message::InstallerExit(res) => {
-            let _ = handle_fallible(state, res, |state, _| {
-                state.allow_next = true;
-                None
-            });
+            state.allow_next = true;
+            let _ = handle_fallible(state, res, |_, _| None);
         }
         Message::InitButton => {
             state.disable_get_started = true;
@@ -538,19 +537,32 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             state.allow_next = false;
             match state.gui_state {
                 GuiState::InstallD2 => state.gui_state = GuiState::InstallLOD,
-                GuiState::InstallLOD => match state.game_state {
-                    Some(ref game_state) => {
-                        state.gui_state = GuiState::Main;
-
-                        if let Err(e) = File::create(game_state.base().join("setup_finished")) {
-                            display_error(state, e.to_string());
-                        };
-                    }
-                    None => display_error(state, Error::Pd2lcpNotInitialised.to_string()),
-                },
+                GuiState::InstallLOD => {
+                    return Task::perform(relocate_files(state.game_state.clone()), |r| {
+                        Message::RelocateFilesTask(r.map_err(|e| e.to_string()))
+                    });
+                }
                 _ => (),
             }
         }
+        Message::RelocateFilesTask(res) => match res {
+            Ok(_) => {
+                state.gui_state = GuiState::Main;
+
+                if let Some(ref game_state) = state.game_state {
+                    if let Err(e) = File::create(game_state.base().join("setup_finished")) {
+                        display_error(state, e.to_string());
+                    }
+                } else {
+                    display_error(state, Error::Pd2lcpNotInitialised.to_string());
+                }
+            }
+            Err(e) => {
+                state.gui_state = GuiState::InstallD2;
+
+                display_error(state, e);
+            }
+        },
         Message::FilePickerButtonD2 => {
             return Task::perform(
                 rfd::AsyncFileDialog::new()
@@ -586,6 +598,9 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             }
         }
         Message::InitGameState(res) => {
+            state.disable_get_started = false;
+            state.init_screen_text = "PD2LCP is not set up";
+
             let _ = handle_fallible(state, res, |state, game_state| {
                 state.game_state = Some(game_state);
                 state.gui_state = GuiState::InstallD2;
@@ -830,7 +845,7 @@ fn install_d2_screen(state: &Launcher) -> Element<'_, Message> {
     let content = col![
         step_indicator(1, 2),
         text("Install Diablo II").size(22).color(palette::TEXT),
-        text("Select your Diablo II installer. Select \"A:\\Diablo II\" as the install path")
+        text("Select your Diablo II installer and install it")
             .size(14)
             .color(palette::TEXT_SECONDARY),
         Space::new().height(space::LG),
@@ -859,12 +874,12 @@ fn install_d2_screen(state: &Launcher) -> Element<'_, Message> {
 fn install_d2_lod_screen(state: &Launcher) -> Element<'_, Message> {
     let content = col![
         step_indicator(2, 2),
-        text("Install Lord of Destruction").size(22).color(palette::TEXT),
-        text(
-            "Select your D2 LOD installer. It will install into the same location as the base game by default."
-        )
-        .size(14)
-        .color(palette::TEXT_SECONDARY),
+        text("Install Lord of Destruction")
+            .size(22)
+            .color(palette::TEXT),
+        text("Select your D2 LOD installer and install it")
+            .size(14)
+            .color(palette::TEXT_SECONDARY),
         Space::new().height(space::LG),
         button(text("Select D2 LOD Installer").center())
             .on_press(Message::FilePickerButtonLOD)
@@ -872,11 +887,15 @@ fn install_d2_lod_screen(state: &Launcher) -> Element<'_, Message> {
             .padding(space::MD)
             .style(secondary_button_style),
         Space::new().height(space::SM),
-            button(text("Next").center())
-                .on_press_maybe(if state.allow_next {Some(Message::NextButton)} else {None})
-                .width(Fill)
-                .padding(space::MD)
-                .style(primary_button_style)
+        button(text("Next").center())
+            .on_press_maybe(if state.allow_next {
+                Some(Message::NextButton)
+            } else {
+                None
+            })
+            .width(Fill)
+            .padding(space::MD)
+            .style(primary_button_style)
     ]
     .spacing(space::SM)
     .width(Fill);
@@ -1250,7 +1269,9 @@ fn main() -> Result<()> {
 
         let rt = tokio::runtime::Runtime::new().expect("Failed to initiate tokio runtime");
 
-        if let Ok(true) = rt.block_on(update_available(Some(state_raw.clone()))) {
+        if let Ok(true) = rt.block_on(update_available(Some(state_raw.clone())))
+            && !settings.no_updates
+        {
             // Update is available (if it errors we just launch, maybe they don't have internet connectivity)
             update_flag = true;
         } else {
