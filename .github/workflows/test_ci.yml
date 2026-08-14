@@ -21,7 +21,7 @@ jobs:
         run: docker run --rm -v "$PWD:/build" pd2lcp-builder
 
       - name: Upload build artefacts
-        uses: actions/upload-artefact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: pd2lcp-build
           path: releases/
