@@ -2073,7 +2073,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libpd2lcp"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dirs",
  "hex",
@@ -2830,7 +2830,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pd2lcp-iced"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "color-eyre",
  "iced",

@@ -5,6 +5,10 @@ PD2LCP is a modern cross-platform ish (more on that [here](#platforms)) Project 
 PD2LCP is designed primarily for Linux and Android (running under Gamenative has been tested, Winlator/Gamehub should work fine too). On Linux it's a native app that installs and manages its own Wine prefix and directories, no Bottles needed. On Android it's
 designed to run under Gamenative as a Windows executable (that does not mean it's compatible with Windows itself, PD2LCP makes some assumptions about the environment that do not hold on Windows, namely that A:\\ exists).
 
+## Filters
+PD2LCP has full support for filters. It will manage your downloaded filters, local ones and update your active ones. If you encounter a blank second panel on the filters screen, you have hit a github rate limit. There's an optional environment variable `GITHUB_TOKEN` you can set to supply your own token and
+increase the rate limits.
+
 ## Installation
 ### Both
 The D2 and LOD installers themselves can prove quite janky. One specific quirk of theirs is that I cannot accurately track when the installation of the base game completed successfully, therefore it's important to let the installers finish. After the first downloader
