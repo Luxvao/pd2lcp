@@ -14,18 +14,23 @@ pub const FILTER_GROUPS_LIST: &str =
 
 pub const LOCAL_FILTER_GROUP: LazyLock<FilterGroup> = LazyLock::new(FilterGroup::local);
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FilterGroup {
     pub name: String,
     pub url: String,
     pub author: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Filter {
     pub grouping: FilterGroup,
     pub name: String,
     pub url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilterEntry {
+    pub filter: Filter,
     pub sha: String,
 }
 
@@ -89,7 +94,10 @@ pub async fn get_filter_authors() -> Result<Vec<FilterGroup>, Error> {
     Ok(filters)
 }
 
-pub async fn get_filters(state: Option<State>, group: FilterGroup) -> Result<Vec<Filter>, Error> {
+pub async fn get_filters(
+    state: Option<State>,
+    group: FilterGroup,
+) -> Result<Vec<(Filter, String)>, Error> {
     let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
 
     let local = &group == &*LOCAL_FILTER_GROUP;
@@ -114,12 +122,14 @@ pub async fn get_filters(state: Option<State>, group: FilterGroup) -> Result<Vec
                 .to_string();
 
             if entry.is_file() && entry_filename.ends_with(".filter") {
-                filters.push(Filter {
-                    grouping: LOCAL_FILTER_GROUP.clone(),
-                    name: entry_filename,
-                    url: "n/a".to_string(),
-                    sha: "n/a".to_string(),
-                });
+                filters.push((
+                    Filter {
+                        grouping: LOCAL_FILTER_GROUP.clone(),
+                        name: entry_filename,
+                        url: "n/a".to_string(),
+                    },
+                    "n/a".to_string(),
+                ));
             }
         }
 
@@ -156,11 +166,15 @@ pub async fn get_filters(state: Option<State>, group: FilterGroup) -> Result<Vec
         .iter()
         .filter(|i| i.type_field == "file" && i.name.ends_with(".filter"))
         .filter_map(|i| {
-            i.download_url.clone().map(|url| Filter {
-                grouping: group.clone(),
-                name: i.name.clone().replace("_", "-"),
-                url,
-                sha: i.sha.clone(),
+            i.download_url.clone().map(|url| {
+                (
+                    Filter {
+                        grouping: group.clone(),
+                        name: i.name.clone().replace("_", "-"),
+                        url,
+                    },
+                    i.sha.clone(),
+                )
             })
         })
         .collect())
@@ -212,25 +226,34 @@ pub async fn delete_filter(state: Option<State>, filter: Filter) -> Result<(), E
     Ok(())
 }
 
-pub async fn check_for_update(state: Option<State>, filter: Filter) -> Result<bool, Error> {
+pub async fn check_for_update(
+    state: Option<State>,
+    filter: Filter,
+    filter_sha: String,
+) -> Result<Option<String>, Error> {
     let filters = get_filters(state, filter.grouping.clone()).await?;
 
-    if filters
+    if let Some(sha) = filters
         .iter()
-        .any(|online_filter| online_filter.name == filter.name && online_filter.sha != filter.sha)
+        .filter(|(online_filter, online_filter_sha)| {
+            online_filter.name == filter.name && online_filter_sha != &filter_sha
+        })
+        .map(|f| f.1.to_string())
+        .next()
     {
         // If we're here then there's an update
-        return Ok(true);
+        return Ok(Some(sha));
     }
 
-    Ok(false)
+    Ok(None)
 }
 
 pub async fn activate_filter(
     state: Option<State>,
     filter: Option<Filter>,
+    filter_sha: String,
     event_notify: EventNotify,
-) -> Result<(), Error> {
+) -> Result<Option<String>, Error> {
     let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
 
     let loot_filter_path = state.pd2_dir().join("loot.filter");
@@ -245,22 +268,30 @@ pub async fn activate_filter(
 
             tokio::fs::copy(selected_filter_path, loot_filter_path).await?;
 
-            return Ok(());
+            return Ok(None);
         }
 
-        if check_for_update(Some(state.clone()), filter.clone()).await? {
+        let sha = if let Some(sha) =
+            check_for_update(Some(state.clone()), filter.clone(), filter_sha).await?
+        {
             // Update available
             event_notify.notify(Event::UpdatingFilter)?;
 
             download_filter(Some(state.clone()), filter.clone()).await?;
 
             event_notify.notify(Event::DoneUpdatingFilter)?;
-        }
+
+            Some(sha)
+        } else {
+            None
+        };
 
         let selected_filter_path = state.filter_dir_online().join(filter.get_filename());
 
         tokio::fs::copy(selected_filter_path, loot_filter_path).await?;
+
+        return Ok(sha);
     }
 
-    Ok(())
+    Ok(None)
 }

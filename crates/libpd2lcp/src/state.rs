@@ -5,7 +5,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::error::Error;
 use crate::event::EventNotify;
-use crate::settings::Settings;
+use crate::settings::{Settings, SettingsSerialisable};
 
 #[derive(Clone, Debug)]
 pub struct State {
@@ -175,11 +175,14 @@ impl State {
     pub async fn serialise_settings(state: Option<State>, settings: Settings) -> Result<(), Error> {
         let state = state.ok_or(Error::Pd2lcpNotInitialised)?;
 
+        // Fix settings to make it serialisable
+        let settings_serialisable: SettingsSerialisable = settings.into();
+
         let settings_file_path = state.base().join("settings.toml");
 
         let mut settings_file = tokio::fs::File::create(&settings_file_path).await?;
 
-        let settings_serialised = toml::to_string_pretty(&settings)?;
+        let settings_serialised = toml::to_string_pretty(&settings_serialisable)?;
 
         settings_file
             .write_all(settings_serialised.as_bytes())
@@ -200,10 +203,10 @@ impl State {
 
         let _ = settings_file.read_to_end(&mut buffer);
 
-        let Ok(settings) = toml::from_slice(&buffer) else {
+        let Ok(settings_serialisable) = toml::from_slice::<SettingsSerialisable>(&buffer) else {
             return Settings::default();
         };
 
-        settings
+        settings_serialisable.into()
     }
 }

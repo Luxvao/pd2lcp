@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ pub enum GraphicsMode {
     _3DFX,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Settings {
     // Launch args
     pub graphics_mode: GraphicsMode,
@@ -19,8 +19,22 @@ pub struct Settings {
     pub no_updates: bool,
 
     // I just cache filters here
-    pub downloaded_filters: Vec<Filter>,
-    pub active_filter: Option<Filter>,
+    pub downloaded_filters: HashMap<Filter, String>,
+    pub active_filter: Option<(Filter, String)>,
+}
+
+// This exists so we can actually serialise to toml
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SettingsSerialisable {
+    // Launch args
+    pub graphics_mode: GraphicsMode,
+    pub skiptobnet: bool,
+    pub sndbkg: bool,
+    pub no_updates: bool,
+
+    // I just cache filters here
+    pub downloaded_filters: Vec<(Filter, String)>,
+    pub active_filter: Option<(Filter, String)>,
 }
 
 impl Display for GraphicsMode {
@@ -39,8 +53,34 @@ impl Default for Settings {
             skiptobnet: true,
             sndbkg: false,
             no_updates: false,
-            downloaded_filters: Vec::new(),
+            downloaded_filters: HashMap::new(),
             active_filter: None,
+        }
+    }
+}
+
+impl From<SettingsSerialisable> for Settings {
+    fn from(value: SettingsSerialisable) -> Self {
+        Settings {
+            graphics_mode: value.graphics_mode,
+            skiptobnet: value.skiptobnet,
+            sndbkg: value.sndbkg,
+            no_updates: value.no_updates,
+            active_filter: value.active_filter,
+            downloaded_filters: value.downloaded_filters.into_iter().collect(),
+        }
+    }
+}
+
+impl From<Settings> for SettingsSerialisable {
+    fn from(value: Settings) -> Self {
+        SettingsSerialisable {
+            graphics_mode: value.graphics_mode,
+            skiptobnet: value.skiptobnet,
+            sndbkg: value.sndbkg,
+            no_updates: value.no_updates,
+            active_filter: value.active_filter,
+            downloaded_filters: value.downloaded_filters.into_iter().collect(),
         }
     }
 }

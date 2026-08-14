@@ -1,0 +1,8 @@
+# packaging/pd2lcp.desktop
+[Desktop Entry]
+Name=PD2LCP
+Comment=Project Diablo 2 Launcher/Updater
+Exec=pd2lcp-iced
+Icon=pd2lcp-iced
+Type=Application
+Categories=Utility;

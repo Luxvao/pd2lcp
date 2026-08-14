@@ -18,7 +18,7 @@ Installation on Linux is fairly simple.
 
 #### Process
   0. Make sure to read the [Both](#both) section.
-  1. Download `pd2lcp-iced` (or flatpak; COMING SOON).
+  1. Download `pd2lcp-iced` (or appimage).
   2. Open it, you will see a welcome screen. Just press Get Started.
   3. Now you're on the "Select D2 Installer" screen. Quite self explanatory, just click on the button and select the D2 installer.
   4. Same as step 3. just for the LOD installer.

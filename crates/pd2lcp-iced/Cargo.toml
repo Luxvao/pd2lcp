@@ -8,7 +8,11 @@ gamemode = []
 
 [dependencies]
 color-eyre = "0.6.5"
-iced = { version = "0.14.0", features = ["tokio"] }
+iced = { version = "0.14.0", features = ["svg", "tokio"] }
 libpd2lcp = { path = "../libpd2lcp" }
 rfd = "0.17.2"
 tokio = "1.53.1"
+
+[package.metadata.appimage]
+icon = "../../icon.svg"
+desktop_entry = "../../pd2lcp.desktop"

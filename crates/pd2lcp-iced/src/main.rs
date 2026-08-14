@@ -15,7 +15,7 @@ use iced::{
     stream,
     widget::{
         Column, Space, button, checkbox, column as col, container, pick_list, progress_bar, row,
-        scrollable, text,
+        scrollable, svg::Handle, text,
     },
 };
 
@@ -33,6 +33,8 @@ use libpd2lcp::{
     state::State,
 };
 
+const ICON: &[u8] = include_bytes!("../../../icon.svg");
+
 static EVENT_NOTIFY: LazyLock<EventNotify> = LazyLock::new(EventNotify::default);
 
 mod palette {
@@ -45,8 +47,9 @@ mod palette {
     pub const TEXT_SECONDARY: Color = Color::from_rgb(0.604, 0.604, 0.635); // #9a9aa2
     pub const ACCENT: Color = Color::from_rgb(0.357, 0.557, 0.937); // #5b8def
     pub const ERROR: Color = Color::from_rgb(0.898, 0.282, 0.298); // #e5484d
-    pub const ACTIVE: Color = Color::from_rgb(0.04, 0.91, 0.29); // #0be84b
-    pub const DOWNLOADED: Color = Color::from_rgb(0.98, 0.98, 0.0); // #fcfc02
+    pub const ACTIVE: Color = Color::from_rgb(0.4196, 0.6196, 0.4706); // #6B9E78
+    pub const DOWNLOADED: Color = Color::from_rgb(0.7882, 0.6353, 0.1529); // #C9A227
+    pub const NEW_AVAILABLE: Color = Color::from_rgb(0.7882, 0.4863, 0.2941); // #C97C4B
 }
 
 mod space {
@@ -166,6 +169,27 @@ fn active_button_style_scrollable(_theme: &Theme, status: button::Status) -> but
 
 fn downloaded_button_style_scrollable(_theme: &Theme, status: button::Status) -> button::Style {
     let base = palette::DOWNLOADED;
+    let background = match status {
+        button::Status::Hovered => lighten(base, 0.06),
+        button::Status::Pressed => darken(base, 0.08),
+        button::Status::Disabled => Color { a: 0.35, ..base },
+        button::Status::Active => base,
+    };
+
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::BLACK,
+        border: Border {
+            radius: 0.0.into(),
+            width: 0.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+fn updatable_button_style_scrollable(_theme: &Theme, status: button::Status) -> button::Style {
+    let base = palette::NEW_AVAILABLE;
     let background = match status {
         button::Status::Hovered => lighten(base, 0.06),
         button::Status::Pressed => darken(base, 0.08),
@@ -346,6 +370,7 @@ struct Launcher {
     game_state: Option<State>,
     gui_state: GuiState,
     settings: Settings,
+    old_settings: Option<Settings>,
 
     // Error mechanism
     error_prev_screen: Option<GuiState>,
@@ -353,9 +378,9 @@ struct Launcher {
     // Runtime values
     // Filter stuff
     selected_author: Option<FilterGroup>,
-    selected_filter: Option<Filter>,
+    selected_filter: Option<(Filter, String)>,
     filter_authors: Option<Vec<FilterGroup>>,
-    filters: Option<Vec<Filter>>,
+    filters: Option<Vec<(Filter, String)>>,
 
     // Strings
     launch_button_label: &'static str,
@@ -386,6 +411,7 @@ impl Launcher {
             game_state,
             gui_state,
             settings,
+            old_settings: None,
 
             error_prev_screen: None,
 
@@ -431,12 +457,13 @@ enum Message {
     // Task results
     Fallible(Result<(), String>),
 
+    ActivateFilterTask(Result<Option<String>, String>),
     InstallerExit(Result<(), String>),
     InitGameState(Result<State, String>),
     LaunchTask(Result<(), String>),
     UpdateCheckTask(Result<bool, String>),
     UpdateTask(Result<(), String>),
-    GetFiltersTask(Result<Vec<Filter>, String>),
+    GetFiltersTask(Result<Vec<(Filter, String)>, String>),
     FetchAuthorsTask(Result<Vec<FilterGroup>, String>),
     RelocateFilesTask(Result<(), String>),
 
@@ -452,7 +479,7 @@ enum Message {
 
     // Filters sceren
     FilterAuthorSelected(FilterGroup),
-    FilterSelected(Filter),
+    FilterSelected((Filter, String)),
 
     // Buttons
     // Init screen
@@ -609,6 +636,7 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             });
         }
         Message::SettingsButton => {
+            state.old_settings = Some(state.settings.clone());
             state.confirm = false;
             state.reset_button_label = "Reset";
             state.gui_state = GuiState::Settings;
@@ -616,12 +644,19 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
         Message::ExitButton => {
             return iced::exit();
         }
-        Message::ReturnButton => state.gui_state = GuiState::Main,
+        Message::ReturnButton => {
+            if let Some(ref old_settings) = state.old_settings {
+                state.settings = old_settings.clone();
+                state.old_settings = None;
+            }
+            state.gui_state = GuiState::Main;
+        }
         Message::GraphicsMode(new) => state.settings.graphics_mode = new,
         Message::SoundCheckbox(b) => state.settings.sndbkg = b,
         Message::BnetCheckbox(b) => state.settings.skiptobnet = b,
         Message::UpdatesCheckbox(b) => state.settings.no_updates = b,
         Message::ApplyButton => {
+            state.old_settings = None;
             state.gui_state = GuiState::Main;
 
             return Task::perform(
@@ -648,15 +683,43 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
                 return Task::perform(
                     activate_filter(
                         state.game_state.clone(),
-                        state.settings.active_filter.clone(),
+                        state.settings.active_filter.clone().map(|f| f.0),
+                        state
+                            .settings
+                            .active_filter
+                            .clone()
+                            .map(|f| f.1)
+                            .unwrap_or_default(),
                         EVENT_NOTIFY.clone(),
                     ),
-                    |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                    |r| Message::ActivateFilterTask(r.map_err(|e| e.to_string())),
                 )
                 .chain(Task::perform(
                     update_available(state.game_state.clone()),
                     |r| Message::UpdateCheckTask(r.map_err(|e| e.to_string())),
                 ));
+            }
+        }
+        Message::ActivateFilterTask(res) => {
+            if let Some(task) = handle_fallible(state, res, |state, maybe_sha| {
+                if let Some(sha) = maybe_sha
+                    && let Some((ref mut active_filter, ref mut active_sha)) =
+                        state.settings.active_filter
+                    && let Some(download_entry_sha) =
+                        state.settings.downloaded_filters.get_mut(active_filter)
+                {
+                    *active_sha = sha.clone();
+                    *download_entry_sha = sha;
+
+                    return Some(Task::perform(
+                        State::serialise_settings(state.game_state.clone(), state.settings.clone()),
+                        |r| Message::Fallible(r.map_err(|e| e.to_string())),
+                    ));
+                }
+
+                None
+            }) {
+                return task;
             }
         }
         Message::UpdateCheckTask(res) => {
@@ -757,8 +820,11 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             );
         }
         Message::DownloadButton => {
-            if let Some(ref sel_filter) = state.selected_filter {
-                state.settings.downloaded_filters.push(sel_filter.clone());
+            if let Some((ref sel_filter, ref sel_filter_sha)) = state.selected_filter {
+                state
+                    .settings
+                    .downloaded_filters
+                    .insert(sel_filter.clone(), sel_filter_sha.clone());
 
                 return Task::perform(
                     download_filter(state.game_state.clone(), sel_filter.clone()),
@@ -771,13 +837,12 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             }
         }
         Message::RemoveButton => {
-            if let Some(ref sel_filter) = state.selected_filter {
-                state
-                    .settings
-                    .downloaded_filters
-                    .retain(|i| i != sel_filter);
+            if let Some((ref sel_filter, _)) = state.selected_filter {
+                state.settings.downloaded_filters.remove(sel_filter);
 
-                if state.settings.active_filter.as_ref() == Some(sel_filter) {
+                if let Some((af, _)) = state.settings.active_filter.as_ref()
+                    && af == sel_filter
+                {
                     state.settings.active_filter = None;
                 }
 
@@ -905,10 +970,11 @@ fn install_d2_lod_screen(state: &Launcher) -> Element<'_, Message> {
 
 fn main_screen(state: &Launcher) -> Element<'_, Message> {
     let header = row![
-        text("Project Diablo II")
-            .size(20)
-            .color(palette::TEXT)
-            .width(Fill),
+        iced::widget::svg(Handle::from_memory(ICON))
+            .height(Length::Fixed(40.0))
+            .width(Length::Fixed(40.0)),
+        Space::new().width(space::LG),
+        text("PD2LCP").size(20).color(palette::TEXT).width(Fill),
         button(text("Filters").size(13))
             .on_press(Message::FilterButton)
             .padding([space::XS, space::SM])
@@ -1116,23 +1182,40 @@ fn filters_screen(state: &Launcher) -> Element<'_, Message> {
         if let Some(ref filters) = state.filters {
             filters
                 .iter()
-                .map(|f| {
-                    button(f.name.as_str())
+                .map(|(filter, filter_sha)| {
+                    button(filter.name.as_str())
                         .on_press_maybe(if state.disallow_filter_group_switching {
                             None
                         } else {
-                            Some(Message::FilterSelected(f.clone()))
+                            Some(Message::FilterSelected((
+                                filter.clone(),
+                                filter_sha.clone(),
+                            )))
                         })
                         .width(Fill)
-                        .style(if Some(f) == state.selected_filter.as_ref() {
-                            primary_button_style_scrollable
-                        } else if Some(f) == state.settings.active_filter.as_ref() {
-                            active_button_style_scrollable
-                        } else if state.settings.downloaded_filters.contains(f) {
-                            downloaded_button_style_scrollable
-                        } else {
-                            secondary_button_style_scrollable
-                        })
+                        .style(
+                            if let Some((sf, _)) = state.selected_filter.as_ref()
+                                && sf == filter
+                            {
+                                primary_button_style_scrollable
+                            } else if let Some((sf, _)) = state.settings.active_filter.as_ref()
+                                && sf == filter
+                            {
+                                active_button_style_scrollable
+                            } else if let Some(curr_sha) =
+                                state.settings.downloaded_filters.get(filter)
+                            {
+                                // We check if it's downloaded at all
+                                // Now we separate if it needs updating or not
+                                if curr_sha != filter_sha {
+                                    updatable_button_style_scrollable
+                                } else {
+                                    downloaded_button_style_scrollable
+                                }
+                            } else {
+                                secondary_button_style_scrollable
+                            },
+                        )
                         .into()
                 })
                 .collect::<Vec<_>>()
@@ -1149,17 +1232,13 @@ fn filters_screen(state: &Launcher) -> Element<'_, Message> {
     let controls = row![
         button("Activate")
             .on_press_maybe(
-                if state.selected_filter.is_some()
+                if let Some((ref sel_filter, _)) = state.selected_filter
                     && state.settings.active_filter != state.selected_filter
-                    && (state
-                        .settings
-                        .downloaded_filters
-                        .iter()
-                        .any(|f| Some(f) == state.selected_filter.as_ref())
+                    && (state.settings.downloaded_filters.contains_key(sel_filter)
                         || state
                             .selected_filter
                             .as_ref()
-                            .map(|f| f.grouping.name.as_str() == "Local")
+                            .map(|(f, _)| f.grouping.name.as_str() == "Local")
                             .unwrap_or(false))
                 {
                     Some(Message::ActivateButton)
@@ -1171,19 +1250,24 @@ fn filters_screen(state: &Launcher) -> Element<'_, Message> {
         Space::new().width(space::XS),
         button("Download")
             .on_press_maybe(
-                if state.selected_filter.is_some()
-                    && !state
-                        .settings
-                        .downloaded_filters
-                        .iter()
-                        .any(|f| Some(f) == state.selected_filter.as_ref())
+                if let Some((ref sel_filter, ref sel_filter_sha)) = state.selected_filter
                     && state
                         .selected_filter
                         .as_ref()
-                        .map(|f| f.grouping.name.as_str() != "Local")
+                        .map(|(f, _)| f.grouping.name.as_str() != "Local")
                         .unwrap_or(false)
                 {
-                    Some(Message::DownloadButton)
+                    // If it's out of date, we should expose Download again
+                    if let Some(local_filter_sha) =
+                        state.settings.downloaded_filters.get(sel_filter)
+                        && local_filter_sha != sel_filter_sha
+                    {
+                        Some(Message::DownloadButton)
+                    } else if !state.settings.downloaded_filters.contains_key(sel_filter) {
+                        Some(Message::DownloadButton)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -1192,16 +1276,12 @@ fn filters_screen(state: &Launcher) -> Element<'_, Message> {
         Space::new().width(space::XS),
         button("Remove")
             .on_press_maybe(
-                if state.selected_filter.is_some()
-                    && (state
-                        .settings
-                        .downloaded_filters
-                        .iter()
-                        .any(|f| Some(f) == state.selected_filter.as_ref())
+                if let Some((ref sel_filter, _)) = state.selected_filter
+                    && (state.settings.downloaded_filters.contains_key(sel_filter)
                         || state
                             .selected_filter
                             .as_ref()
-                            .map(|f| f.grouping.name.as_str() == "Local")
+                            .map(|(f, _)| f.grouping.name.as_str() == "Local")
                             .unwrap_or(false))
                 {
                     Some(Message::RemoveButton)
