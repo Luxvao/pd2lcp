@@ -14,4 +14,5 @@ build_container:
 # Builds the files release-ready
 build_release: build_container
     cargo clean
-    podman run --rm -it -v .:/build pd2lcp_devenv bash -c "cargo b -Zbuild-std --release && cargo xwin b --target x86_64-pc-windows-msvc --release --features=gamemode && cd crates/pd2lcp-iced && cargo appimage -Zbuild-std"
+    rm -fr releases/
+    podman run --rm -it -v .:/build pd2lcp_devenv

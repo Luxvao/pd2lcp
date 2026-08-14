@@ -1,0 +1,27 @@
+name: Release (test)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release_test:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build container
+        run: docker build -t pd2lcp-builder -f Containerfile .
+
+      - name: Build release
+        run: docker run --rm -v "$PWD:/build" pd2lcp-builder
+
+      - name: Upload build artefacts
+        uses: actions/upload-artefact@v4
+        with:
+          name: pd2lcp-build
+          path: releases/

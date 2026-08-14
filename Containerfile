@@ -1,7 +1,6 @@
 FROM ubuntu:22.04
 
 RUN apt-get update
-RUN apt-get upgrade -y
 
 RUN apt-get install build-essential pkg-config libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libvulkan-dev libxkbcommon-dev curl file appstream llvm clang -y
 
@@ -25,3 +24,4 @@ RUN chmod +x /usr/local/bin/appimagetool
 
 WORKDIR /build
 
+ENTRYPOINT /build/build_release.sh
