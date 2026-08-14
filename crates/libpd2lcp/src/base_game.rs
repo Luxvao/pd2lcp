@@ -90,7 +90,7 @@ pub async fn relocate_files(state: Option<State>) -> Result<(), Error> {
         .ok_or(Error::D2InstalledIncorrectly)?
         .trim();
 
-    if install_path == "A:\\Diablo II" {
+    if install_path == "A:\\Diablo II\\" {
         return Ok(());
     }
 
@@ -147,7 +147,7 @@ pub async fn relocate_files(_: Option<State>) -> Result<(), Error> {
 
     let current_path: String = hklm_d2.get_value("InstallPath")?;
 
-    if current_path.as_str() == "A:\\Diablo II" {
+    if current_path.as_str() == "A:\\Diablo II\\" {
         return Ok(());
     }
 

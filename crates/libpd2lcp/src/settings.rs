@@ -10,13 +10,16 @@ pub enum GraphicsMode {
     _3DFX,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     // Launch args
     pub graphics_mode: GraphicsMode,
     pub skiptobnet: bool,
     pub sndbkg: bool,
     pub no_updates: bool,
+
+    // Launcher
+    pub scale_factor: f32,
 
     // I just cache filters here
     pub downloaded_filters: HashMap<Filter, String>,
@@ -27,14 +30,17 @@ pub struct Settings {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SettingsSerialisable {
     // Launch args
-    pub graphics_mode: GraphicsMode,
-    pub skiptobnet: bool,
-    pub sndbkg: bool,
-    pub no_updates: bool,
+    graphics_mode: GraphicsMode,
+    skiptobnet: bool,
+    sndbkg: bool,
+    no_updates: bool,
+
+    // Launcher
+    scale_factor: f32,
 
     // I just cache filters here
-    pub downloaded_filters: Vec<(Filter, String)>,
-    pub active_filter: Option<(Filter, String)>,
+    downloaded_filters: Vec<(Filter, String)>,
+    active_filter: Option<(Filter, String)>,
 }
 
 impl Display for GraphicsMode {
@@ -53,6 +59,7 @@ impl Default for Settings {
             skiptobnet: true,
             sndbkg: false,
             no_updates: false,
+            scale_factor: 1.0,
             downloaded_filters: HashMap::new(),
             active_filter: None,
         }
@@ -66,6 +73,7 @@ impl From<SettingsSerialisable> for Settings {
             skiptobnet: value.skiptobnet,
             sndbkg: value.sndbkg,
             no_updates: value.no_updates,
+            scale_factor: value.scale_factor,
             active_filter: value.active_filter,
             downloaded_filters: value.downloaded_filters.into_iter().collect(),
         }
@@ -79,6 +87,7 @@ impl From<Settings> for SettingsSerialisable {
             skiptobnet: value.skiptobnet,
             sndbkg: value.sndbkg,
             no_updates: value.no_updates,
+            scale_factor: value.scale_factor,
             active_filter: value.active_filter,
             downloaded_filters: value.downloaded_filters.into_iter().collect(),
         }

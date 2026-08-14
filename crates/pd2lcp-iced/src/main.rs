@@ -15,7 +15,7 @@ use iced::{
     stream,
     widget::{
         Column, Space, button, checkbox, column as col, container, pick_list, progress_bar, row,
-        scrollable, svg::Handle, text,
+        scrollable, slider, svg::Handle, text,
     },
 };
 
@@ -122,6 +122,54 @@ fn pick_list_style(_theme: &Theme, _status: pick_list::Status) -> pick_list::Sty
             radius: 8.0.into(),
             color: palette::BORDER,
             width: 1.0,
+        },
+    }
+}
+
+fn checkbox_style(theme: &Theme, status: checkbox::Status) -> checkbox::Style {
+    let base = palette::ACCENT;
+    let background = match status {
+        checkbox::Status::Active { is_checked } if is_checked => base,
+        checkbox::Status::Active { is_checked: _ } => palette::SURFACE,
+        checkbox::Status::Hovered { is_checked } if is_checked => lighten(base, 0.06),
+        checkbox::Status::Hovered { is_checked: _ } => darken(palette::SURFACE, 0.03),
+        checkbox::Status::Disabled { is_checked: _ } => Color { a: 0.32, ..base },
+    };
+
+    checkbox::Style {
+        background: background.into(),
+        border: Border {
+            color: palette::BORDER,
+            width: 1.0,
+            radius: 5.0.into(),
+        },
+        ..checkbox::primary(theme, status)
+    }
+}
+
+fn slider_style(_theme: &Theme, status: slider::Status) -> slider::Style {
+    let base = palette::ACCENT;
+    let background = match status {
+        slider::Status::Hovered => lighten(base, 0.06),
+        slider::Status::Dragged => darken(base, 0.08),
+        slider::Status::Active => base,
+    };
+
+    slider::Style {
+        rail: slider::Rail {
+            backgrounds: (background.into(), palette::SURFACE.into()),
+            width: 10.0,
+            border: Border {
+                color: palette::BORDER,
+                width: 1.0,
+                radius: 5.0.into(),
+            },
+        },
+        handle: slider::Handle {
+            shape: slider::HandleShape::Circle { radius: 8.0 },
+            background: background.into(),
+            border_width: 0.0,
+            border_color: palette::BORDER,
         },
     }
 }
@@ -370,7 +418,7 @@ struct Launcher {
     game_state: Option<State>,
     gui_state: GuiState,
     settings: Settings,
-    old_settings: Option<Settings>,
+    new_settings: Settings,
 
     // Error mechanism
     error_prev_screen: Option<GuiState>,
@@ -410,8 +458,8 @@ impl Launcher {
         Launcher {
             game_state,
             gui_state,
-            settings,
-            old_settings: None,
+            settings: settings.clone(),
+            new_settings: settings,
 
             error_prev_screen: None,
 
@@ -421,7 +469,7 @@ impl Launcher {
             filters: None,
 
             launch_button_label: "Launch",
-            reset_button_label: "Reset",
+            reset_button_label: "Reset Installation",
             init_screen_text: "PD2LCP is not set up",
 
             downloading_filter: false,
@@ -472,6 +520,7 @@ enum Message {
     SoundCheckbox(bool),
     BnetCheckbox(bool),
     UpdatesCheckbox(bool),
+    ScaleSlider(f32),
 
     // Installers selected
     D2InstallerSelected(Option<PathBuf>),
@@ -636,28 +685,25 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
             });
         }
         Message::SettingsButton => {
-            state.old_settings = Some(state.settings.clone());
+            state.new_settings = state.settings.clone();
             state.confirm = false;
-            state.reset_button_label = "Reset";
+            state.reset_button_label = "Reset Installation";
             state.gui_state = GuiState::Settings;
         }
         Message::ExitButton => {
             return iced::exit();
         }
         Message::ReturnButton => {
-            if let Some(ref old_settings) = state.old_settings {
-                state.settings = old_settings.clone();
-                state.old_settings = None;
-            }
+            state.new_settings = state.settings.clone();
             state.gui_state = GuiState::Main;
         }
-        Message::GraphicsMode(new) => state.settings.graphics_mode = new,
-        Message::SoundCheckbox(b) => state.settings.sndbkg = b,
-        Message::BnetCheckbox(b) => state.settings.skiptobnet = b,
-        Message::UpdatesCheckbox(b) => state.settings.no_updates = b,
+        Message::GraphicsMode(new) => state.new_settings.graphics_mode = new,
+        Message::SoundCheckbox(b) => state.new_settings.sndbkg = b,
+        Message::BnetCheckbox(b) => state.new_settings.skiptobnet = b,
+        Message::UpdatesCheckbox(b) => state.new_settings.no_updates = b,
+        Message::ScaleSlider(scale) => state.new_settings.scale_factor = scale / 100.0,
         Message::ApplyButton => {
-            state.old_settings = None;
-            state.gui_state = GuiState::Main;
+            state.settings = state.new_settings.clone();
 
             return Task::perform(
                 State::serialise_settings(state.game_state.clone(), state.settings.clone()),
@@ -1056,7 +1102,7 @@ fn settings_screen(state: &Launcher) -> Element<'_, Message> {
                 Space::new().width(space::SM),
                 pick_list(
                     renderers,
-                    Some(state.settings.graphics_mode),
+                    Some(state.new_settings.graphics_mode),
                     Message::GraphicsMode
                 )
                 .style(pick_list_style)
@@ -1066,23 +1112,46 @@ fn settings_screen(state: &Launcher) -> Element<'_, Message> {
         Space::new().height(space::MD),
         settings_section(
             "Sound",
-            checkbox(state.settings.sndbkg)
+            checkbox(state.new_settings.sndbkg)
                 .label("Sound in background")
+                .style(checkbox_style)
                 .on_toggle(Message::SoundCheckbox)
         ),
         Space::new().height(space::LG),
         settings_section(
             "Misc",
             col![
-                checkbox(state.settings.skiptobnet)
+                checkbox(state.new_settings.skiptobnet)
                     .label("Skip to battlenet")
+                    .style(checkbox_style)
                     .on_toggle(Message::BnetCheckbox),
                 Space::new().height(space::XS),
-                checkbox(state.settings.no_updates)
+                checkbox(state.new_settings.no_updates)
                     .label("Disable updates")
+                    .style(checkbox_style)
                     .on_toggle(Message::UpdatesCheckbox),
             ]
         ),
+        Space::new().height(space::LG),
+        settings_section(
+            "Launcher",
+            col![
+                row![
+                    text("UI Scale"),
+                    Space::new().width(space::MD),
+                    text(format!("{:.0}%", state.new_settings.scale_factor * 100.0))
+                ]
+                .align_y(iced::Alignment::Center),
+                Space::new().width(space::LG),
+                slider(
+                    75.0..=200.0,
+                    state.new_settings.scale_factor * 100.0,
+                    Message::ScaleSlider
+                )
+                .style(slider_style)
+            ]
+        ),
+        Space::new().height(space::XS),
         row![
             container(
                 button(state.reset_button_label)
@@ -1097,7 +1166,11 @@ fn settings_screen(state: &Launcher) -> Element<'_, Message> {
             container(
                 button(text("Apply").size(13))
                     .style(primary_button_style)
-                    .on_press(Message::ApplyButton)
+                    .on_press_maybe(if state.settings != state.new_settings {
+                        Some(Message::ApplyButton)
+                    } else {
+                        None
+                    })
             )
             .align_right(Fill)
         ]
@@ -1406,6 +1479,7 @@ fn main() -> Result<()> {
         update,
         view,
     )
+    .scale_factor(|state| state.settings.scale_factor)
     .window(iced::window::Settings {
         fullscreen,
         ..Default::default()
