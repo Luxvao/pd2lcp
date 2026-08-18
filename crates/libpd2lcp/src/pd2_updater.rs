@@ -51,7 +51,7 @@ pub async fn install_pd2(state: Option<State>, notify: EventNotify) -> Result<()
     let pd2_files = state.pd2_dir();
 
     if !pd2_files.is_dir() {
-        std::fs::create_dir_all(&pd2_files)?;
+        tokio::fs::create_dir_all(&pd2_files).await?;
     }
 
     let total = metadata_game_files.len() as u32;

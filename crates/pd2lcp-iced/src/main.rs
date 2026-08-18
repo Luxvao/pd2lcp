@@ -588,7 +588,7 @@ fn update(state: &mut Launcher, message: Message) -> Task<Message> {
 
                 let _ = handle_fallible(
                     &mut new_state,
-                    cleanup(base).map_err(|e| e.to_string()),
+                    cleanup(false, base).map_err(|e| e.to_string()),
                     |_, _| None,
                 );
 
@@ -1447,7 +1447,7 @@ fn main() -> Result<()> {
 
             let (game_state, gui_state) = if !setup_finished_path.exists() {
                 if base_path.exists() {
-                    cleanup(base_path).expect("Failed to clean up");
+                    cleanup(true, base_path).expect("Failed to clean up");
                 }
 
                 #[cfg(target_os = "linux")]
@@ -1512,13 +1512,17 @@ fn display_error(state: &mut Launcher, error: String) {
 }
 
 #[cfg(target_os = "linux")]
-fn cleanup(path: &Path) -> Result<(), Error> {
+fn cleanup(_: bool, path: &Path) -> Result<(), Error> {
     std::fs::remove_dir_all(path).map_err(|e| e.into())
 }
 
 #[cfg(target_os = "windows")]
-fn cleanup(path: &Path) -> Result<(), Error> {
+fn cleanup(startup: bool, path: &Path) -> Result<(), Error> {
     use std::fs::read_dir;
+
+    if startup {
+        return Ok(());
+    }
 
     for entry in read_dir(path)? {
         if let Ok(entry) = entry {
